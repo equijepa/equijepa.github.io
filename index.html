@@ -1,0 +1,2028 @@
+<!DOCTYPE html>
+<!-- EquiJEPA project page (https://equijepa.github.io). Deployed with
+     deploy.sh. TODO when available: arXiv link (Paper, BibTeX), code repo. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EquiJEPA: Learning Action-Centered Latent Transition Geometry</title>
+<meta name="description" content="EquiJEPA jointly learns a latent world model and a state-blind effect head, so the same action produces similar latent transitions across states. The resulting action prototypes execute at new states, compose, and carry over to a new command interface.">
+<meta property="og:title" content="EquiJEPA: Learning Action-Centered Latent Transition Geometry">
+<meta property="og:description" content="A state-blind effect head makes the same action produce similar latent transitions across states in a latent world model.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://equijepa.github.io/">
+<meta property="og:image" content="https://equijepa.github.io/assets/fig/fig1_concentration_training.png">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  :root {
+    --ink: #16161a;
+    --ink-soft: #3c3c40;
+    --ink-faint: #75757b;
+    --vermilion: #b2352b;
+    --paper: #ffffff;
+    --rule: #e8e6e0;
+    --shade: #faf9f6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--paper);
+    color: var(--ink-soft);
+    font: 17px/1.7 Georgia, "Times New Roman", serif;
+  }
+
+  /* hero display type; OFL fonts, self-hosted (assets/fonts) */
+  @font-face {
+    font-family: "Inter"; font-style: normal; font-weight: 100 900;
+    font-display: swap; src: url("assets/fonts/inter-latin-var.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "Cormorant Garamond"; font-style: italic; font-weight: 300 700;
+    font-display: swap;
+    src: url("assets/fonts/cormorant-garamond-italic-latin-var.woff2") format("woff2");
+  }
+
+  /* ── hero ─────────────────────────────────────────────── */
+  .hero {
+    position: relative; height: 100vh; min-height: 560px; overflow: hidden;
+    background: var(--paper);
+  }
+  /* the animation's frame: full width on narrow or tall screens; on wide
+     screens it starts at 28% so the headline sits on white, as on the AP
+     page where the product is right of center */
+  .hero .frame {
+    position: absolute; top: 0; bottom: 0; left: 0; right: 0;
+    background: url("assets/hero_poster.jpg?v=4") center / cover no-repeat;
+  }
+  @media (min-width: 861px) and (min-aspect-ratio: 5/4) {
+    .hero .frame {
+      left: 28%;             /* fade the frame's left edge: dots that drift
+                                to the video border end softly, not in a cut */
+      -webkit-mask-image: linear-gradient(to right, transparent 0, #000 14%);
+              mask-image: linear-gradient(to right, transparent 0, #000 14%);
+    }
+  }
+  .hero video {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    opacity: 0; transition: opacity .6s ease;
+  }
+  .hero video.playing { opacity: 1; }
+  /* white fades: a thin one under the top bar, a wider one from the left
+     edge under the headline; the rest of the animation stays clear */
+  .hero .veil {
+    position: absolute; inset: 0; pointer-events: none;
+    background:
+      linear-gradient(to bottom, rgba(255,255,255,0.95) 0%,
+                      rgba(255,255,255,0.86) 11%, rgba(255,255,255,0) 20%),
+      linear-gradient(to right, rgba(255,255,255,0.92) 0%,
+                      rgba(255,255,255,0.86) 30%, rgba(255,255,255,0) 50%);
+  }
+  .headline {
+    position: absolute; left: var(--hero-x); top: 43%;
+    color: var(--ink);
+  }
+  .hero { --hero-x: clamp(24px, 8.5vw, 170px); }
+  .headline h1 { font-weight: normal; text-transform: uppercase; }
+  .headline .thin {
+    display: block;
+    font: 200 clamp(30px, 2.9vw, 56px)/1.08 "Inter", "Helvetica Neue", Arial, sans-serif;
+    letter-spacing: -0.005em;
+  }
+  .headline .serif {
+    display: block;
+    font: italic 400 clamp(35px, 3.4vw, 65px)/1.0 "Cormorant Garamond", Georgia, serif;
+  }
+  .headline .cta {
+    display: inline-flex; align-items: center; gap: 14px; margin-top: 30px;
+    font: 300 15px "Inter", "Helvetica Neue", Arial, sans-serif;
+    letter-spacing: .02em; color: var(--ink); text-decoration: none;
+  }
+  .headline .cta .rule {
+    display: inline-block; width: 46px; height: 1px; background: currentColor;
+    transition: width .25s ease;
+  }
+  .headline .cta:hover .rule { width: 70px; }
+  .hero-pause {
+    position: absolute; right: 44px; bottom: 30px;
+    width: 38px; height: 38px; border: 0; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.7); color: var(--ink); cursor: pointer;
+  }
+  .hero-pause:hover { background: rgba(255,255,255,0.95); }
+  .hero-pause:focus-visible, .headline .cta:focus-visible {
+    outline: 1px solid var(--ink); outline-offset: 3px;
+  }
+
+  /* ── top bar ──────────────────────────────────────────── */
+  .topbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 18px; padding: 34px 44px 22px;
+    background: transparent;
+    border-bottom: 1px solid transparent;
+    transition: background .3s ease, border-bottom-color .3s ease,
+                transform .32s ease;
+  }
+  .topbar.hidden { transform: translateY(-100%); }
+  .topbar.scrolled {
+    background: rgba(255,255,255,0.90);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    border-bottom-color: var(--rule);
+  }
+  .topbar .brandblock {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    text-align: center; line-height: 1.25;
+  }
+  .topbar .brand {
+    color: var(--ink); font-weight: 700; font-size: 36px;
+    letter-spacing: .06em; text-decoration: none; display: block;
+  }
+  .topbar .tagline {
+    color: var(--ink-soft); font-size: 16px;
+    letter-spacing: .04em; font-style: italic; margin-top: 2px;
+  }
+  .topbar nav { display: flex; gap: 26px; flex-wrap: wrap; margin-left: auto; }
+  .topbar nav a {
+    color: var(--ink-soft); text-decoration: none;
+    font-size: 17px; transition: color .15s ease;
+  }
+  .topbar nav a:hover { color: var(--ink); }
+  .topbar nav a.accent { color: var(--vermilion); }
+  .topbar nav a.accent:hover { color: #8d2a22; }
+  .topbar nav .soon { color: var(--ink-faint); font-size: 17px; }
+  @media (max-width: 1180px) {
+    .topbar .brandblock { position: static; transform: none; text-align: left; }
+  }
+  /* phones and tablets: the bar scrolls away with the hero instead of
+     covering the text */
+  @media (max-width: 860px) {
+    .topbar {
+      position: absolute; flex-direction: column; gap: 6px;
+      padding: 16px 16px 8px;
+    }
+    .topbar.hidden { transform: none; }
+    .topbar.scrolled { background: transparent; backdrop-filter: none;
+      -webkit-backdrop-filter: none; border-bottom-color: transparent; }
+    .topbar .brandblock { text-align: center; }
+    .topbar .brand { font-size: 28px; }
+    .topbar .tagline { font-size: 14px; letter-spacing: .02em; }
+    .topbar nav { margin-left: 0; justify-content: center; gap: 16px; }
+    .topbar nav a, .topbar nav .soon { font-size: 15.5px; }
+  }
+  .hud {
+    position: absolute; bottom: 36px; left: var(--hero-x);
+    font: 300 14px/1 "Inter", "Helvetica Neue", Arial, sans-serif;
+    letter-spacing: .02em; color: var(--ink-soft);
+    background: rgba(255,255,255,0.75); padding: 8px 14px; border-radius: 999px;
+    font-variant-numeric: tabular-nums;
+  }
+  .hud .sep { margin: 0 8px; color: var(--ink-faint); }
+  @media (max-width: 640px) { .hud { display: none; } }
+  @media (max-width: 860px), (max-aspect-ratio: 5/4) {
+    .hero { --hero-x: 22px; }
+    .hero .veil {
+      background:
+        linear-gradient(to bottom, rgba(255,255,255,0.92) 0%,
+                        rgba(255,255,255,0) 20%),
+        linear-gradient(to top, rgba(255,255,255,0.92) 0%,
+                        rgba(255,255,255,0.86) 36%, rgba(255,255,255,0) 54%);
+    }
+    .headline { left: var(--hero-x); right: 22px; top: auto; bottom: 92px; }
+    .headline .thin { font-size: 27px; }
+    .headline .serif { font-size: 32px; }
+    .headline .cta { margin-top: 20px; font-size: 14px; }
+    .hero-pause { right: 16px; bottom: 20px; }
+  }
+  .scroll-hint {
+    position: absolute; bottom: 26px; left: 50%;
+    transform: translateX(-50%);
+    color: var(--ink-faint); font-size: 22px;
+    animation: bob 2.2s ease-in-out infinite;
+    text-decoration: none;
+  }
+  @keyframes bob { 0%,100% {transform: translate(-50%,0)} 50% {transform: translate(-50%,8px)} }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .scroll-hint { animation: none; }
+    .topbar, .hero video { transition: none; }
+  }
+
+  /* ── interactive point cloud ─────────────────────────── */
+  .cloud-wrap {
+    position: relative;
+    border: 1px solid var(--rule); border-radius: 8px;
+    overflow: hidden; background: #fff;
+  }
+  #cloud-canvas { width: 100%; height: 540px; display: block; cursor: grab;
+                  touch-action: none; }
+  #cloud-canvas:active { cursor: grabbing; }
+  .cloud-toggle {
+    position: absolute; top: 12px; left: 12px;
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .cloud-toggle button {
+    font: 13.5px Georgia, serif; color: var(--ink-soft);
+    background: rgba(255,255,255,0.92); border: 1px solid var(--rule);
+    border-radius: 999px; padding: 5px 14px; cursor: pointer;
+  }
+  .cloud-toggle button.active {
+    color: var(--paper); background: var(--ink); border-color: var(--ink);
+  }
+  #cloud-toggle { top: 50px; }   /* model pills sit under the env tabs */
+  #cloud-vocab { top: auto; left: auto; right: 14px; bottom: 12px; }
+  #cloud-eta {
+    position: absolute; left: 14px; bottom: 12px;
+    font: italic 18px Georgia, serif; color: var(--ink);
+    background: rgba(255,255,255,0.85); padding: 6px 14px;
+    border-radius: 999px;
+  }
+  #cloud-card {
+    position: absolute; top: 12px; right: 12px; width: 200px;
+    background: rgba(255,255,255,0.96); border: 1px solid var(--rule);
+    border-radius: 10px; padding: 12px 14px; display: none;
+  }
+  #cloud-card h4 {
+    font: 600 14px Georgia, serif; color: var(--ink); margin-bottom: 4px;
+  }
+  #cloud-card p { font-size: 12.5px; line-height: 1.45; color: var(--ink-faint); margin: 0 0 6px; }
+  #cloud-card canvas { width: 100%; border: 1px solid var(--rule); border-radius: 6px; }
+  #cloud-card-bars { margin-top: 8px; }
+  #cloud-card-bars .brow {
+    display: flex; align-items: center; gap: 6px; margin: 3px 0;
+    font-size: 11.5px; color: var(--ink-faint);
+  }
+  #cloud-card-bars .brow .lbl { width: 62px; white-space: nowrap; }
+  #cloud-card-bars .brow .tr {
+    flex: 1; height: 7px; background: #f0efec; border-radius: 4px;
+    overflow: hidden;
+  }
+  #cloud-card-bars .brow .fill { height: 100%; background: #c9c7c0; }
+  #cloud-card-bars .brow.cur { color: var(--ink); font-weight: 600; }
+  #cloud-card-bars .brow.cur .fill { background: var(--ink); }
+  .cloud-hint { font-size: 14px; color: var(--ink-faint); margin-top: 8px; line-height: 1.6; }
+  /* narrow screens: controls above the canvas, the card below it */
+  @media (max-width: 720px) {
+    .cloud-wrap { display: flex; flex-direction: column; }
+    .cloud-toggle, #cloud-eta, #cloud-card {
+      position: static; width: auto;
+    }
+    .cloud-toggle { padding: 10px 10px 0; gap: 6px; }
+    .cloud-toggle button { font-size: 12.5px; padding: 4px 11px; }
+    #cloud-env { order: 0; } #cloud-toggle { order: 1; }
+    #cloud-canvas { order: 2; height: 360px; }
+    #cloud-eta { order: 3; align-self: flex-start; margin: 0 10px 4px;
+                 font-size: 16px; padding: 2px 4px; background: none; }
+    #cloud-vocab { order: 4; padding: 0 10px 10px; }
+    #cloud-card { order: 5; margin: 0 10px 10px; }
+    #cloud-card canvas { max-width: 220px; }
+  }
+
+  /* ── dictionary demo ──────────────────────────────────── */
+  .sae-wrap { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; margin-top: 18px; }
+  @media (max-width: 720px) { .sae-wrap { grid-template-columns: 1fr; } }
+  .sae-panel {
+    border: 1px solid var(--rule); border-radius: 8px;
+    background: #fff; padding: 14px 14px 12px;
+  }
+  .sae-panel h4 {
+    font: 600 14px Georgia, serif; color: var(--ink); margin-bottom: 8px;
+  }
+  .sae-panel canvas { width: 100%; border: 1px solid #f0efec;
+    border-radius: 6px; display: block; }
+  .sae-panel p { font-size: 13px; line-height: 1.5;
+    color: var(--ink-faint); margin: 8px 0 0; }
+  .sae-nav { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+  .sae-nav button {
+    font: 13px Georgia, serif; color: var(--ink-soft);
+    background: #fff; border: 1px solid var(--rule);
+    border-radius: 999px; padding: 3px 12px; cursor: pointer;
+  }
+  .sae-nav button:hover { border-color: var(--ink-soft); }
+  .sae-nav button.on {
+    color: #fff; background: var(--ink); border-color: var(--ink);
+  }
+  .sae-nav span { font-size: 12.5px; color: var(--ink-faint); }
+  #sae-atoms { display: flex; gap: 10px; margin-top: 10px; }
+  #sae-atoms .at { text-align: center; }
+  #sae-atoms canvas {
+    width: 52px; height: 52px; display: block;
+    border: 1px solid var(--rule); border-radius: 6px;
+  }
+  #sae-atoms .cap {
+    font-size: 11px; line-height: 1.3; color: var(--ink-faint);
+    margin-top: 3px;
+  }
+
+  /* ── content ──────────────────────────────────────────── */
+  main { max-width: 900px; margin: 0 auto; padding: 72px 24px 40px; }
+  @media (max-width: 640px) { main { padding: 48px 16px 32px; } }
+  section { margin-bottom: 76px; scroll-margin-top: 110px; }
+  h2 {
+    color: var(--ink);
+    font-size: 26px; font-weight: 600; line-height: 1.3;
+    margin-bottom: 20px;
+  }
+  h2::after {
+    content: ""; display: block;
+    width: 44px; height: 3px; margin-top: 10px;
+    background: var(--vermilion);
+  }
+  h3 { color: var(--ink); font-size: 19px; font-weight: 600; margin: 34px 0 10px; }
+  p + p { margin-top: 14px; }
+  em { color: var(--ink); }
+  a { color: var(--vermilion); }
+  figure { margin: 24px 0 8px; }
+  figure img, figure video {
+    width: 100%; height: auto; border-radius: 8px; display: block;
+    border: 1px solid var(--rule); background: #fff;
+  }
+  figure.narrow img, figure.narrow video { max-width: 560px; margin: 0 auto; }
+  figcaption {
+    margin-top: 10px; font-size: 14.5px;
+    color: var(--ink-faint); line-height: 1.6;
+  }
+  figcaption b { color: var(--ink-soft); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .grid2 figure { margin: 0; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+  .eq {
+    margin: 18px 0; padding: 14px 18px; text-align: center;
+    background: var(--shade); border: 1px solid var(--rule); border-radius: 8px;
+    font-size: 18px; color: var(--ink); line-height: 1.9;
+  }
+  ul.plain { margin: 10px 0 0 1.2em; }
+  ul.plain li + li { margin-top: 8px; }
+  details { margin-top: 12px; font-size: 15px; }
+  details summary { cursor: pointer; color: var(--ink-soft); }
+  details[open] summary { margin-bottom: 6px; }
+  details p { color: var(--ink-faint); }
+
+  /* tables */
+  .tbl { overflow-x: auto; margin: 20px 0 8px; -webkit-overflow-scrolling: touch; }
+  table {
+    border-collapse: collapse; width: 100%; min-width: 560px;
+    font-size: 14px; line-height: 1.45; font-variant-numeric: tabular-nums;
+  }
+  caption {
+    caption-side: bottom; text-align: left; padding-top: 10px;
+    font-size: 14px; color: var(--ink-faint); line-height: 1.6;
+  }
+  thead th { border-bottom: 1px solid var(--ink-soft); font-weight: 600; color: var(--ink); }
+  table { border-top: 1.5px solid var(--ink-soft); border-bottom: 1.5px solid var(--ink-soft); }
+  th, td { padding: 5px 8px; text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child, td.l, th.l { text-align: left; }
+  tbody tr.grp td { border-top: 1px solid var(--rule); }
+  td b { color: var(--ink); }
+  .sd { font-size: 11px; color: var(--ink-faint); }
+  .tbl::before { content: ""; }
+  @media (max-width: 600px) {
+    .tbl::before { content: "Table scrolls sideways \2192"; display: block;
+      position: sticky; left: 0; font-size: 12.5px; color: var(--ink-faint);
+      margin-bottom: 4px; }
+  }
+
+  .authors { color: var(--ink); }
+  .affil { font-size: 15px; color: var(--ink-faint); }
+  p.affil { margin-top: 4px; }
+  pre.bibtex {
+    background: var(--shade); border: 1px solid var(--rule);
+    border-radius: 8px; padding: 20px;
+    font: 13px/1.6 "SFMono-Regular", Consolas, monospace;
+    overflow-x: auto; color: var(--ink-soft);
+  }
+  footer {
+    border-top: 1px solid var(--rule);
+    padding: 28px 24px 42px; text-align: center;
+    color: var(--ink-faint); font-size: 14px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ════════ TOP BAR ════════ -->
+<header class="topbar">
+  <div class="brandblock">
+    <a class="brand" href="#top">EquiJEPA</a>
+    <div class="tagline">Learning Action-Centered Latent Transition Geometry</div>
+  </div>
+  <nav>
+    <a href="assets/EquiJEPA.pdf" target="_blank" rel="noopener">Paper</a> <!-- TODO: replace with the arXiv abs URL -->
+    <span class="soon">Code (coming soon)</span> <!-- TODO repo URL -->
+    <a class="accent" href="#animation">About the animation</a>
+    <a href="#bibtex">BibTeX</a>
+  </nav>
+</header>
+
+<!-- ════════ HERO ════════ -->
+<div class="hero" id="top">
+  <div class="frame">
+    <video muted loop playsinline preload="auto"
+           poster="assets/hero_poster.jpg?v=4"
+           src="assets/training_dynamics_ink24.mp4?v=4"></video>
+  </div>
+  <div class="veil"></div>
+  <div class="headline">
+    <h1><span class="thin">Latent world models</span>
+      <span class="serif">with shared</span>
+      <span class="serif">action prototypes</span></h1>
+    <a class="cta" href="#abstract"><span class="rule"></span>Read the abstract</a>
+  </div>
+  <div class="hud" id="hud"><span id="hud-eta">&eta;&sup2; = 0.445</span><span class="sep">·</span><span id="hud-step">step 30</span></div>
+  <button class="hero-pause" id="hero-pause" type="button" aria-label="Pause the animation"></button>
+  <a class="scroll-hint" href="#abstract" aria-label="Scroll to the abstract">▾</a>
+</div>
+
+<script>
+// 2-D canvas at device resolution; drawing code keeps CSS-pixel units
+window.ctx2d = function (cv, w, h) {
+  var r = Math.min(window.devicePixelRatio || 1, 3);
+  if (cv.width !== Math.round(w * r)) {
+    cv.width = Math.round(w * r); cv.height = Math.round(h * r);
+  }
+  var g = cv.getContext("2d");
+  g.setTransform(r, 0, 0, r, 0, 0);
+  return g;
+};
+window.reduceMotion = !!(window.matchMedia &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+
+(function () {
+  var bar = document.querySelector(".topbar");
+  var lastY = window.scrollY;
+  function onScroll() {
+    var y = window.scrollY;
+    bar.classList.toggle("scrolled", y > 40);
+    if (Math.abs(y - lastY) > 6) {          // ignore sub-pixel jitter
+      // hide when scrolling down past the hero's first stretch,
+      // reveal on any upward scroll
+      bar.classList.toggle("hidden", y > lastY && y > 140);
+      lastY = y;
+    }
+  }
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+
+  var hero = document.querySelector(".hero");
+  var video = hero.querySelector("video");
+  var hudBox = document.getElementById("hud");
+  var eta = document.getElementById("hud-eta");
+  var step = document.getElementById("hud-step");
+  var btn = document.getElementById("hero-pause");
+  var PAUSE = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">' +
+    '<rect x="3" y="2" width="1.6" height="10" fill="currentColor"/>' +
+    '<rect x="9.4" y="2" width="1.6" height="10" fill="currentColor"/></svg>';
+  var PLAY = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">' +
+    '<path d="M4 2.2 L11.5 7 L4 11.8 Z" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.3" stroke-linejoin="round"/></svg>';
+  // the file starts at frame 8 of the recording (the near-still opening
+  // is cut) and ends where the dynamics stop, so the native loop is exact
+  var OFFSET = 8;
+  if (window.reduceMotion) {           // poster only, no counter
+    hudBox.style.display = btn.style.display = "none";
+    video.removeAttribute("src"); video.load();
+    return;
+  }
+  var hud = null, visible = true, raf = 0, userPaused = false;
+  fetch("assets/training_dynamics_ink24.json")
+    .then(function (r) { return r.json(); })
+    .then(function (d) { hud = d; })
+    .catch(function () { hudBox.style.display = "none"; });
+  function setBtn() {
+    btn.innerHTML = userPaused ? PLAY : PAUSE;
+    btn.setAttribute("aria-label", userPaused ? "Play the animation"
+                                              : "Pause the animation");
+  }
+  setBtn();
+  btn.addEventListener("click", function () {
+    userPaused = !userPaused;
+    if (userPaused) video.pause(); else play();
+    setBtn();
+  });
+  function tick() {                    // counter, while visible and playing
+    raf = 0;
+    if (!visible || video.paused) return;
+    if (hud) {
+      var i = Math.min(Math.floor(video.currentTime * hud.fps) + OFFSET,
+                       hud.frames.length - 1);
+      if (i >= 0 && hud.frames[i]) {
+        eta.innerHTML = "&eta;&sup2; = " + hud.frames[i][1].toFixed(3);
+        step.textContent = "step " + hud.frames[i][0].toLocaleString("en-US");
+      }
+    }
+    raf = requestAnimationFrame(tick);
+  }
+  function reveal() { video.classList.add("playing"); }
+  video.addEventListener("playing", reveal, { once: true });
+  setTimeout(reveal, 2000);            // fallback: never stay hidden
+  function play() {
+    var p = video.play(); if (p && p.catch) p.catch(function () {});
+    if (!raf) raf = requestAnimationFrame(tick);
+  }
+  new IntersectionObserver(function (es) {
+    visible = es[0].isIntersecting;
+    if (visible && !userPaused) play(); else video.pause();
+  }).observe(hero);
+})();
+</script>
+
+<main>
+
+<!-- ════════ ABSTRACT ════════ -->
+<section id="abstract">
+  <h2>Abstract</h2>
+  <p>Latent world models learn to predict future states from the current
+  state and an action, and are often also trained to recover the executed
+  action from a pair of consecutive states. However, these methods do not
+  require the same action in different states to produce similar latent
+  transitions, so learned representations need not transfer to new states
+  or add up predictably. We call this missing property <em>action
+  equivariance</em>. We introduce EquiJEPA, which jointly learns a latent
+  world model and an effect head that predicts latent transitions from
+  actions alone. Because the head cannot see the state, reducing its loss
+  requires the encoder to make the same action produce similar latent
+  transitions across states, forming a shared action prototype. These
+  shared prototypes can then be applied at new states or added together,
+  with the inverse head translating the resulting transitions into
+  executable actions.</p>
+  <p>We evaluate these operations across four simulated environments,
+  testing whether learned action prototypes can be combined, executed from
+  new states, and reused across command interfaces. In all four, EquiJEPA
+  makes the latent transitions of each action more consistent across
+  states than the base model does, while keeping agent and object state
+  decodable. Its action prototypes also execute more accurately at new
+  states, compose into unseen action combinations, and carry over to a new
+  command interface.</p>
+  <figure>
+    <img src="assets/fig/fig1_concentration_training.png" loading="lazy"
+         width="1700" height="449"
+         alt="Push-T latent transitions at training checkpoints and transition concentration curves for EquiJEPA, the base model, and a LeWM-style model">
+    <figcaption><b>EquiJEPA learns more consistent latent transitions for
+    the same action across states (Push-T).</b> Top: EquiJEPA's latent
+    transitions at selected checkpoints, projected onto the first two
+    principal components of its final checkpoint and coloured by action
+    direction. Bottom: transition concentration &eta;&sup2;<sub>raw</sub>
+    during training. Inverse dynamics raises concentration, EquiJEPA's
+    effect head raises it further, and the LeWM-style baseline stays
+    low.</figcaption>
+  </figure>
+</section>
+
+<!-- ════════ THE ANIMATION ════════ -->
+<section id="animation">
+  <h2>About the background animation</h2>
+  <p>The animation behind the title is recorded from EquiJEPA training in
+  the two-dot world (&lambda;<sub>eq</sub>&nbsp;=&nbsp;10). Each point is
+  the latent transition &Delta;z of one of 24 actions that move the first
+  dot, executed from the same 200 starting states; the states are
+  re-encoded at every saved checkpoint. The 2-D projection is fixed and
+  comes from the final checkpoint, and frames between checkpoints are
+  linearly interpolated. The counter is &eta;&sup2;<sub>raw</sub> over the
+  24 actions: 0.065 at initialization and 0.999 at step 19,600.</p>
+  <figure class="narrow">
+    <video muted loop playsinline preload="none" width="672" height="672"
+           src="assets/training_dynamics.mp4?v=2"
+           aria-label="Two actions' latent transitions over training"></video>
+    <figcaption>Two actions, 260 starting states each, with the path of
+    every point over training, from a second EquiJEPA run with the same
+    configuration. The counter is &eta;&sup2;<sub>raw</sub> of the
+    pair.</figcaption>
+  </figure>
+</section>
+
+<!-- ════════ METHOD ════════ -->
+<section id="method">
+  <h2>Method</h2>
+  <figure>
+    <img src="assets/fig/method_overview_ab.webp?v=2" loading="lazy"
+         width="1800" height="752"
+         alt="EquiJEPA training schematic and prototype reuse at a new state">
+    <figcaption><b>Training and prototype reuse.</b> (a) A shared encoder
+    maps o<sub>t</sub> and o<sub>t+1</sub> to z<sub>t</sub> and
+    z<sub>t+1</sub>. The predictor and inverse head form the base model.
+    The effect head receives only the action and predicts the action
+    prototype &rho;(a<sub>t</sub>), which the equivariance loss matches to
+    the latent transition z<sub>t+1</sub>&nbsp;&minus;&nbsp;z<sub>t</sub>.
+    All three losses train the encoder; photos are illustrative. (b) An
+    action prototype &rho;(a) is added at a new latent state z, and the
+    inverse head decodes (z,&nbsp;z&nbsp;+&nbsp;&rho;(a)) into an
+    executable action.</figcaption>
+  </figure>
+  <p>The base model is an inverse-dynamics JEPA (SMWM): the predictor
+  estimates z<sub>t+1</sub> from (z<sub>t</sub>,&nbsp;a<sub>t</sub>) and
+  the inverse head recovers a<sub>t</sub> from
+  (z<sub>t</sub>,&nbsp;z<sub>t+1</sub>). EquiJEPA adds an effect head
+  &rho; that sees only the action:</p>
+  <div class="eq">
+    &Lscr;<sub>equiv</sub> = &Vert;&Delta;z<sub>t</sub> &minus; &rho;(a<sub>t</sub>)&Vert;&sup2;,
+    &nbsp;&nbsp; &Delta;z<sub>t</sub> = z<sub>t+1</sub> &minus; z<sub>t</sub><br>
+    &Lscr; = &Lscr;<sub>pred</sub> + &lambda;<sub>inv</sub>&thinsp;&Lscr;<sub>inv</sub> + &lambda;<sub>eq</sub>&thinsp;&Lscr;<sub>equiv</sub>
+  </div>
+  <p>For a fixed encoder, the best state-blind head outputs the mean
+  latent transition of each action, E[&Delta;z&nbsp;|&nbsp;a]. The loss
+  that remains is the variance of &Delta;z within each action, and only
+  the encoder can reduce it. Training therefore concentrates the latent
+  transitions of one action around a shared <em>action prototype</em>
+  &rho;(a). The remainder &Delta;z&nbsp;&minus;&nbsp;&rho;(a) is the
+  <em>interaction residual</em>; it contains contact effects, encoder
+  error, and other state-dependent parts. The equivariance loss alone
+  admits a constant representation; the inverse loss prevents this
+  collapse, and the predictive loss keeps state-dependent outcomes, such
+  as a push that moves the block only when the agent touches it.</p>
+  <p><em>Why inverse dynamics is not enough.</em> Decoding the action from
+  &Delta;z only requires different actions to stay distinguishable. A
+  decoder can read the action from a few latent dimensions while the
+  other dimensions vary with the state, so perfect decoding is compatible
+  with any amount of within-action variation (Proposition&nbsp;1 in the
+  paper).</p>
+  <p><em>Measurement.</em> Controlled-replay concentration executes each
+  action from many starting states and reports
+  &eta;&sup2;<sub>raw</sub>&nbsp;=&nbsp;tr&nbsp;B&nbsp;/&nbsp;tr&nbsp;T,
+  the fraction of latent-transition variance explained by the action; 1
+  means every execution of an action gives the same &Delta;z. Action fit
+  is the held-out R&sup2; of a regressor that predicts &Delta;z from the
+  action on logged trajectories, which does not need simulator
+  resets.</p>
+  <figure>
+    <img src="assets/fig/equiv_pressure.png" loading="lazy"
+         width="1700" height="898"
+         alt="Two actions' latent transitions under the base model and under EquiJEPA">
+    <figcaption><b>Where the loss acts (two-dot world, end of
+    training).</b> Two actions, each replayed from 400 states; every dot is
+    one &Delta;z(s,&nbsp;a<sub>i</sub>). Left: base model (labelled
+    &ldquo;vanilla&rdquo;), &eta;&sup2;&nbsp;=&nbsp;0.91. Right: EquiJEPA,
+    &eta;&sup2;&nbsp;=&nbsp;0.999. The arrows are the head's output
+    &rho;(a<sub>i</sub>), the mean of each cloud. The equivariance loss
+    splits into the distance from &rho;(a<sub>i</sub>) to the cloud mean,
+    which the head removes, and the spread of the cloud, which only the
+    encoder can remove.</figcaption>
+  </figure>
+</section>
+
+<!-- ════════ SETUP ════════ -->
+<section id="setup">
+  <h2>Environments</h2>
+  <figure>
+    <img src="assets/fig/environments.png" loading="lazy"
+         width="1700" height="464"
+         alt="Dot world, Push-T, OGBench Cube, and Maze environments">
+    <figcaption>(a) Dot world with two controlled dots; arrows show one
+    primitive action each. (b)&ndash;(d) Pixel-based tasks: contact-rich
+    pushing, sustained grasping, and maze navigation.</figcaption>
+  </figure>
+  <p>The <em>dot world</em> is a 64&times;64 arena with one or two
+  controlled dots; each action is a pixel displacement, so the physical
+  outcome of every action and composition is known exactly (CNN encoder,
+  d&nbsp;=&nbsp;64). The pixel-based tasks use the LeWM stack with a
+  ViT-Tiny encoder (d&nbsp;=&nbsp;192): <em>Push-T</em> with 5-step action
+  chunks, <em>OGBench cube-single</em>, and <em>Maze</em> with 20 training
+  and 5 held-out corridor layouts. The base model has the same encoder,
+  predictor, inverse head, budget, and data as EquiJEPA and differs only
+  in &lambda;<sub>eq</sub>&nbsp;=&nbsp;0. We also compare a LeWM-style
+  model (the LeWM isotropy guard instead of inverse dynamics) and frozen
+  DINOv2 features (DINO-WM-style). Unless stated otherwise, results use
+  three paired model seeds.</p>
+</section>
+
+<!-- ════════ CONCENTRATION ════════ -->
+<section id="concentration">
+  <h2>Transition concentration</h2>
+  <p>In all four environments EquiJEPA has the highest action fit and
+  controlled-replay &eta;&sup2;<sub>raw</sub>, and on the pixel-based tasks
+  its action fit improves over the matched base for all three paired seeds. The base
+  recovers actions from latent pairs, but its concentration stays lower,
+  for example 0.747 versus 0.910 on contact-free Push-T and 0.570 versus
+  0.872 on Cube. LeWM-style and DINO-WM-style representations stay between
+  0.033 and 0.112 under replay. On Push-T and Maze, contact and collision
+  lower concentration for the base and EquiJEPA, because the transition
+  then depends more on the state.</p>
+  <div class="tbl">
+  <table>
+    <caption>Action fit: held-out R&sup2; of a linear regressor (dot world)
+    or a capacity-matched MLP (pixel tasks). Replay
+    &eta;&sup2;<sub>raw</sub> is split by interaction regime. Mean &plusmn;
+    SD over three paired seeds; DINO-WM-style features are frozen. A dash
+    marks an evaluation not run. Bold: best mean.</caption>
+    <thead><tr><th>environment</th><th class="l">metric</th><th>LeWM-style</th>
+      <th>DINO-WM-style</th><th>base (SMWM)</th><th>EquiJEPA</th></tr></thead>
+    <tbody>
+      <tr class="grp"><td>Dot world, one dot</td><td class="l">action fit</td><td>&ndash;</td><td>&ndash;</td><td>0.821 <span class="sd">&plusmn;0.013</span></td><td><b>0.9998</b> <span class="sd">&plusmn;0.0001</span></td></tr>
+      <tr><td></td><td class="l">replay &eta;&sup2;</td><td>&ndash;</td><td>&ndash;</td><td>0.836 <span class="sd">&plusmn;0.010</span></td><td><b>0.9997</b> <span class="sd">&plusmn;0.0001</span></td></tr>
+      <tr class="grp"><td>Dot world, two dots</td><td class="l">action fit</td><td>&ndash;</td><td>&ndash;</td><td>0.888 <span class="sd">&plusmn;0.018</span></td><td><b>0.9989</b> <span class="sd">&plusmn;0.0005</span></td></tr>
+      <tr><td></td><td class="l">replay &eta;&sup2;</td><td>&ndash;</td><td>&ndash;</td><td>0.895 <span class="sd">&plusmn;0.014</span></td><td><b>0.9987</b> <span class="sd">&plusmn;0.0007</span></td></tr>
+      <tr class="grp"><td>Push-T</td><td class="l">action fit</td><td>0.019 <span class="sd">&plusmn;0.003</span></td><td>&minus;0.061</td><td>0.688 <span class="sd">&plusmn;0.014</span></td><td><b>0.869</b> <span class="sd">&plusmn;0.002</span></td></tr>
+      <tr><td></td><td class="l">replay &eta;&sup2;, free</td><td>0.104 <span class="sd">&plusmn;0.003</span></td><td>0.112</td><td>0.747 <span class="sd">&plusmn;0.015</span></td><td><b>0.910</b> <span class="sd">&plusmn;0.001</span></td></tr>
+      <tr><td></td><td class="l">replay &eta;&sup2;, contact</td><td>0.043 <span class="sd">&plusmn;0.001</span></td><td>0.070</td><td>0.605 <span class="sd">&plusmn;0.022</span></td><td><b>0.833</b> <span class="sd">&plusmn;0.003</span></td></tr>
+      <tr class="grp"><td>Cube</td><td class="l">action fit</td><td>0.100 <span class="sd">&plusmn;0.007</span></td><td>0.073</td><td>0.825 <span class="sd">&plusmn;0.009</span></td><td><b>0.947</b> <span class="sd">&plusmn;0.003</span></td></tr>
+      <tr><td></td><td class="l">replay &eta;&sup2;, sustained grasp</td><td>0.033 <span class="sd">&plusmn;0.0004</span></td><td>0.050</td><td>0.570 <span class="sd">&plusmn;0.026</span></td><td><b>0.872</b> <span class="sd">&plusmn;0.005</span></td></tr>
+      <tr class="grp"><td>Maze</td><td class="l">action fit</td><td>&minus;0.052 <span class="sd">&plusmn;0.032</span></td><td>0.010</td><td>0.326 <span class="sd">&plusmn;0.053</span></td><td><b>0.687</b> <span class="sd">&plusmn;0.028</span></td></tr>
+      <tr><td></td><td class="l">replay &eta;&sup2;, free</td><td>0.061 <span class="sd">&plusmn;0.018</span></td><td>0.052</td><td>0.481 <span class="sd">&plusmn;0.047</span></td><td><b>0.777</b> <span class="sd">&plusmn;0.049</span></td></tr>
+      <tr><td></td><td class="l">replay &eta;&sup2;, collision</td><td>0.080 <span class="sd">&plusmn;0.028</span></td><td>0.057</td><td>0.206 <span class="sd">&plusmn;0.014</span></td><td><b>0.394</b> <span class="sd">&plusmn;0.027</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3 id="cloud">Explore the latent transitions</h3>
+  <p>Each point is one latent transition &Delta;z: 24 designed action
+  chunks (on Push-T, 8 directions &times; 3 magnitudes), each executed from the same
+  96 starting states, shown in the top three principal components of each
+  representation. Hue is the commanded direction and shade the magnitude.
+  <b>Drag</b> to rotate, <b>scroll</b> to zoom, and <b>click a point</b> to
+  highlight the 96 executions of that action and see the commanded chunk.
+  <b>dictionary</b> (bottom right) draws the atoms of the sparse dictionary
+  as rays; click a ray's tip to see the atom decoded by the inverse
+  head.</p>
+  <div class="cloud-wrap">
+    <canvas id="cloud-canvas" aria-label="Interactive 3-D view of latent transitions"></canvas>
+    <div class="cloud-toggle" id="cloud-env"></div>
+    <div class="cloud-toggle" id="cloud-toggle"></div>
+    <div class="cloud-toggle" id="cloud-vocab"></div>
+    <div id="cloud-eta"></div>
+    <div id="cloud-card">
+      <h4 id="cloud-card-title"></h4>
+      <p id="cloud-card-sub"></p>
+      <canvas id="cloud-card-canvas" width="164" height="164"></canvas>
+      <p style="margin-top:6px" id="cloud-card-note"></p>
+      <p style="margin:8px 0 0" id="cloud-card-barcap">distance to the
+      nearest other action, in units of this action's spread (longer bar
+      = better separated):</p>
+      <div id="cloud-card-bars"></div>
+    </div>
+  </div>
+  <p class="cloud-hint">The badge shows &eta;&sup2;<sub>raw</sub> on these
+  24 designed chunks for seed-0 models, so it differs from the table
+  above, which uses random expert windows and three seeds. Principal
+  components are computed per representation and scaled to unit RMS.</p>
+  <details>
+    <summary>What each environment tab shows</summary>
+    <p><em>Push-T</em>: planar pushing, 2-D actions, 5-step chunks.
+    <em>Cube</em>: 7-DoF arm, 5-D actions; the card draws the commanded
+    end-effector path in 3-D. <em>Maze</em>: 3-step chunks from starting
+    states in open space, so no execution reaches a wall. <em>Dot
+    world</em>: single-step moves of one of two dots; the third button is a
+    model trained without the inverse loss, whose latents collapse.</p>
+  </details>
+</section>
+
+<script>
+// if the 3-D view fails to start (WebGL off, old browser, fetch error),
+// show a static image where it would be
+window.addEventListener("error", function (e) {
+  window.__cloudError = e.message || String(e);
+}, true);
+setTimeout(function () {
+  if (window.__cloudReady) return;
+  var el = document.querySelector(".cloud-wrap");
+  if (!el) return;
+  var msg = "The interactive 3-D view needs WebGL, which this browser " +
+            "could not provide.";
+  try {
+    var c = document.createElement("canvas");
+    if (!c.getContext("webgl2") && !c.getContext("webgl"))
+      msg = "WebGL is off in this browser (usually a hardware-" +
+            "acceleration setting), so the 3-D view cannot run.";
+  } catch (err) {}
+  if (window.__cloudError) msg += " [" + window.__cloudError + "]";
+  el.insertAdjacentHTML("beforeend",
+    '<div id="cloud-fallback" style="position:absolute;inset:0;background:#fff">' +
+    '<img src="assets/cloud_fallback.png" alt="Static view of the EquiJEPA ' +
+    'Push-T latent transitions: 24 separated action clusters" ' +
+    'style="width:100%;height:100%;object-fit:cover;object-position:center">' +
+    '<div style="position:absolute;left:0;right:0;bottom:0;padding:8px 16px;' +
+    'background:rgba(255,255,255,.93);border-top:1px solid #ececec;' +
+    'color:#75757b;font:13px Georgia,serif;text-align:center">' +
+    "Static image: EquiJEPA on Push-T, 24 designed chunks " +
+    "(&eta;&sup2;<sub>raw</sub> 0.73 on these chunks, versus 0.52 for the " +
+    "base and 0.04 for frozen DINOv2 features). " + msg + "</div></div>");
+}, 3500);
+</script>
+<script type="module">
+import * as THREE from "./assets/vendor/three.module.min.js?v=3";
+import { OrbitControls } from "./assets/vendor/OrbitControls.js?v=3";
+
+const wrap = document.querySelector(".cloud-wrap");
+const canvas = document.getElementById("cloud-canvas");
+const card = document.getElementById("cloud-card");
+const etaBadge = document.getElementById("cloud-eta");
+
+const ENVS = [
+  { label: "Push-T", url: "assets/deltaz_cloud.json",
+    unit: "action units" },
+  { label: "Cube", url: "assets/deltaz_cloud_cube.json",
+    unit: "action units" },
+  { label: "Maze", url: "assets/deltaz_cloud_maze.json",
+    unit: "arena units (arena = 5×5)" },
+  { label: "Dot world", url: "assets/deltaz_cloud_toy.json",
+    unit: "px (of the 64-px frame)" },
+];
+const envCache = [];
+async function fetchEnv(i) {
+  if (!envCache[i]) envCache[i] = await (await fetch(ENVS[i].url)).json();
+  return envCache[i];
+}
+let data = await fetchEnv(0);
+let M, S, N, chunkColor, pos, col;
+let cur = 0, curEnv = 0, selected = -1;
+
+// chunk color = hue of the commanded net direction. 2-D envs: shade =
+// magnitude (outer ring darker). Dot world (4-D = two dots): hue = the
+// moved dot's direction, muted for dot 2. Cube (5-D): shade = vertical
+// component (up = lighter); pure z/yaw/grip probes have no planar
+// direction, so they render neutral gray.
+function chunkColors() {
+  const dims = data.actions[0][0].length;
+  const nets = data.actions.map(ch => {
+    const n = new Array(dims).fill(0);
+    for (const a of ch) for (let d = 0; d < dims; d++) n[d] += a[d];
+    return n;
+  });
+  if (dims === 4) {
+    const rmax = Math.max(...nets.map(n =>
+      Math.max(Math.hypot(n[0], n[1]), Math.hypot(n[2], n[3]))), 1e-9);
+    return nets.map(n => {
+      const d1 = Math.hypot(n[0], n[1]), d2 = Math.hypot(n[2], n[3]);
+      const [x, y, s] = d1 >= d2 ? [n[0], n[1], 0.68] : [n[2], n[3], 0.36];
+      const h = (Math.atan2(y, x) / (2 * Math.PI) + 1) % 1;
+      return new THREE.Color().setHSL(
+        h, s, 0.64 - 0.22 * (Math.max(d1, d2) / rmax));
+    });
+  }
+  const rmax = Math.max(...nets.map(n => Math.hypot(n[0], n[1])), 1e-9);
+  const zmax = Math.max(...nets.map(n => Math.abs(n[2] || 0)), 1e-9);
+  return nets.map(n => {
+    const r = Math.hypot(n[0], n[1]);
+    const h = (Math.atan2(n[1], n[0]) / (2 * Math.PI) + 1) % 1;
+    if (dims === 5 && r < 0.05 * rmax)
+      return new THREE.Color().setHSL(0, 0.02, 0.55 + 0.2 * (n[2] / zmax));
+    const l = dims === 5 ? 0.52 + 0.16 * (n[2] / zmax)
+                         : 0.66 - 0.24 * (r / rmax);
+    return new THREE.Color().setHSL(h, 0.62, l);
+  });
+}
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color("#ffffff");
+const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 100);
+camera.position.set(4.4, 3.1, 4.4);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+
+// round-sprite texture
+const tex = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 64;
+  const g = c.getContext("2d");
+  g.beginPath(); g.arc(32, 32, 30, 0, 7); g.fillStyle = "#fff"; g.fill();
+  return new THREE.CanvasTexture(c);
+})();
+
+const geom = new THREE.BufferGeometry();   // buffers sized in applyData()
+const mat = new THREE.PointsMaterial({
+  size: 0.085, vertexColors: true, map: tex,
+  alphaTest: 0.5, transparent: true, sizeAttenuation: true,
+});
+// keep the depth cue but stop near-camera points ballooning
+mat.onBeforeCompile = sh => {
+  sh.vertexShader = sh.vertexShader.replace(
+    "gl_PointSize *= ( scale / - mvPosition.z );",
+    "gl_PointSize *= ( scale / - mvPosition.z ); " +
+    "gl_PointSize = min( gl_PointSize, 24.0 );");
+};
+const points = new THREE.Points(geom, mat);
+scene.add(points);
+
+// the sparse dictionary: its atoms drawn as rays from the cloud center
+// (ray direction = the atom in this cloud's PCs, ray length = its share
+// inside those PCs)
+let atomGroup = null, atomTips = null, atomMats = [], vocabOn = false,
+    selectedAtom = -1;
+function buildAtoms() {
+  if (atomGroup) { scene.remove(atomGroup); atomGroup = null; atomTips = null; }
+  atomMats = []; selectedAtom = -1;
+  const A = data.atoms;
+  const btn = document.querySelector("#cloud-vocab button");
+  if (btn) btn.style.display = A ? "" : "none";
+  if (!A) return;
+  const dims = A.chunks[0][0].length;
+  const nets = A.chunks.map(ch => {
+    const n = new Array(dims).fill(0);
+    for (const a of ch) for (let d = 0; d < dims; d++) n[d] += a[d];
+    return n;
+  });
+  const rmax = Math.max(...nets.map(n => Math.hypot(n[0], n[1])), 1e-9);
+  const L = 2.3 / Math.max(...A.dirs.map(d => Math.hypot(...d)), 1e-9);
+  atomGroup = new THREE.Group();
+  const tipPos = new Float32Array(A.dirs.length * 3);
+  const tipCol = new Float32Array(A.dirs.length * 3);
+  A.dirs.forEach((d, k) => {
+    const n = nets[k];
+    let c;
+    if (dims === 4) {
+      const d1 = Math.hypot(n[0], n[1]), d2 = Math.hypot(n[2], n[3]);
+      const [x, y, s] = d1 >= d2 ? [n[0], n[1], 0.68] : [n[2], n[3], 0.36];
+      c = new THREE.Color().setHSL(
+        (Math.atan2(y, x) / (2 * Math.PI) + 1) % 1, s, 0.45);
+    } else if (dims === 5 && Math.hypot(n[0], n[1]) < 0.05 * rmax) {
+      c = new THREE.Color().setHSL(0, 0.02, 0.5);
+    } else {
+      c = new THREE.Color().setHSL(
+        (Math.atan2(n[1], n[0]) / (2 * Math.PI) + 1) % 1, 0.62, 0.45);
+    }
+    const tip = [d[0] * L, d[2] * L, d[1] * L];  // same axis swap as pts
+    const geo = new THREE.BufferGeometry().setFromPoints(
+      [new THREE.Vector3(0, 0, 0), new THREE.Vector3(...tip)]);
+    const m = new THREE.LineBasicMaterial(
+      { color: c, transparent: true, opacity: 0.85 });
+    atomMats.push(m);
+    atomGroup.add(new THREE.Line(geo, m));
+    tipPos.set(tip, 3 * k);
+    tipCol.set([c.r, c.g, c.b], 3 * k);
+  });
+  const tg = new THREE.BufferGeometry();
+  tg.setAttribute("position", new THREE.BufferAttribute(tipPos, 3));
+  tg.setAttribute("color", new THREE.BufferAttribute(tipCol, 3));
+  atomTips = new THREE.Points(tg, new THREE.PointsMaterial({
+    size: 0.13, vertexColors: true, map: tex, alphaTest: 0.5,
+    transparent: true, sizeAttenuation: true,
+  }));
+  atomGroup.add(atomTips);
+  scene.add(atomGroup);
+  updateAtoms();
+}
+function updateAtoms() {
+  const show = !!(vocabOn && data.atoms && cur === data.atoms.model);
+  if (atomGroup) atomGroup.visible = show;
+  const btn = document.querySelector("#cloud-vocab button");
+  if (btn) btn.classList.toggle("active", vocabOn);
+  if (!show && selectedAtom >= 0) deselect();
+  atomOpacity();
+  kick();
+}
+function atomOpacity() {
+  atomMats.forEach((m, k) => {
+    m.opacity = selectedAtom < 0 ? 0.85 : (k === selectedAtom ? 1 : 0.15);
+  });
+}
+
+function paint() {
+  const dim = new THREE.Color("#e2e0da");
+  for (let i = 0; i < N; i++) {
+    const k = Math.floor(i / S);
+    const c = (selectedAtom >= 0) ? dim
+      : (selected >= 0 && k !== selected) ? dim : chunkColor[k];
+    col[3 * i] = c.r; col[3 * i + 1] = c.g; col[3 * i + 2] = c.b;
+  }
+  geom.attributes.color.needsUpdate = true;
+  kick();
+}
+function setModel(m) {
+  cur = m;
+  const pts = data.models[m].pts;
+  for (let i = 0; i < N; i++) {
+    pos[3 * i] = pts[i][0]; pos[3 * i + 1] = pts[i][2]; pos[3 * i + 2] = pts[i][1];
+  }
+  geom.attributes.position.needsUpdate = true;
+  geom.computeBoundingSphere();
+  etaBadge.innerHTML = "&eta;&sup2;<sub>raw</sub> = " + data.models[m].eta2.toFixed(2);
+  tog.querySelectorAll("button").forEach(
+    (b, i) => b.classList.toggle("active", i === m));
+  paint();
+  updateAtoms();
+  if (selected >= 0) select(selected);   // refresh the card's model row
+}
+
+// toggle buttons: environments (top row) and representations (below)
+const tog = document.getElementById("cloud-toggle");
+const envTog = document.getElementById("cloud-env");
+function buildModelPills() {
+  tog.innerHTML = "";
+  data.models.forEach((mo, i) => {
+    const b = document.createElement("button");
+    b.textContent = mo.label;
+    b.onclick = () => setModel(i);
+    tog.appendChild(b);
+  });
+}
+ENVS.forEach((ev, i) => {
+  const b = document.createElement("button");
+  b.textContent = ev.label;
+  b.onclick = () => setEnv(i);
+  envTog.appendChild(b);
+});
+{
+  const b = document.createElement("button");
+  b.textContent = "dictionary";
+  b.title = "draw the sparse dictionary's atoms";
+  b.onclick = () => { vocabOn = !vocabOn; updateAtoms(); };
+  document.getElementById("cloud-vocab").appendChild(b);
+}
+async function setEnv(i) {
+  curEnv = i;
+  envTog.querySelectorAll("button").forEach(
+    (b, j) => b.classList.toggle("active", j === i));
+  data = await fetchEnv(i);
+  applyData();
+}
+function applyData() {
+  M = data.n_chunks; S = data.n_states; N = M * S;
+  chunkColor = chunkColors();
+  pos = new Float32Array(N * 3);
+  col = new Float32Array(N * 3);
+  geom.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  geom.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  buildModelPills();
+  buildAtoms();
+  selected = -1; card.style.display = "none";
+  setModel(Math.min(cur, data.models.length - 1));
+}
+
+// picking
+const ray = new THREE.Raycaster();
+ray.params.Points.threshold = 0.06;
+const mouse = new THREE.Vector2();
+let downAt = null;
+canvas.addEventListener("pointerdown", e => { downAt = [e.clientX, e.clientY]; });
+canvas.addEventListener("pointerup", e => {
+  if (!downAt) return;
+  const moved = Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]);
+  downAt = null;
+  if (moved > 5) return;                       // it was a drag
+  const r = canvas.getBoundingClientRect();
+  mouse.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+  mouse.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+  ray.setFromCamera(mouse, camera);
+  if (atomGroup && atomGroup.visible && atomTips) {
+    const ha = ray.intersectObject(atomTips)[0];
+    if (ha) { selectAtom(ha.index); return; }
+  }
+  const hit = ray.intersectObject(points)[0];
+  if (hit) select(Math.floor(hit.index / S));
+  else deselect();
+});
+function deselect() {
+  selected = -1; selectedAtom = -1; card3 = null;
+  card.style.display = "none";
+  document.getElementById("cloud-card-barcap").style.display = "";
+  paint(); atomOpacity();
+}
+
+// atom card: the dictionary atom decoded by the trained inverse head
+// (mean over held-out states), drawn with the per-environment sketchers
+function selectAtom(k) {
+  if (!(vocabOn && data.atoms && cur === data.atoms.model)) return;
+  selectedAtom = k; selected = -1;
+  paint(); atomOpacity();
+  card.style.display = "block";
+  const A = data.atoms;
+  const ch = A.chunks[k];
+  const dims = ch[0].length;
+  const color = atomMats[k].color;
+  document.getElementById("cloud-card-title").textContent = "atom " + k;
+  let sub = "dictionary atom · share inside the shown PCs " + A.inplane[k].toFixed(2);
+  if (A.names && A.names[k]) sub += " · matches " + A.names[k];
+  document.getElementById("cloud-card-sub").textContent = sub;
+  const g = ctx2d(cardCanvas, 164, 164);
+  g.clearRect(0, 0, 164, 164);
+  const u = v => (v === 1
+    ? ENVS[curEnv].unit.replace("units", "unit") : ENVS[curEnv].unit);
+  card3 = null;
+  cardCanvas.style.cursor = "default";
+  let note, sv;
+  if (dims === 5) {
+    sv = sketch3D(g, ch, color);
+    if (sv != null) card3 = { ch, color, A: DEF_A, E: DEF_E };
+    cardCanvas.style.cursor = card3 ? "grab" : "default";
+    note = "The atom decoded by the inverse head (mean over 96 " +
+      "held-out states): a " + (ch.length) + "-step end-effector path." +
+      (sv == null ? "" : " Axis arms at the start = " + sv +
+        " " + u(sv) + " each. Drag this small view to rotate it.");
+  } else if (dims === 4) {
+    // a unit atom's decoded magnitude is arbitrary (coefficients set
+    // it), so it is rescaled for readability and drawn without a scale bar
+    const mx = Math.max(...ch[0].map(Math.abs), 1e-9);
+    sketchDots(g, [ch[0].map(v => v * 12 / mx)], false);
+    note = "The atom decoded by the trained inverse model (mean over the 96 " +
+      "starting states): a single-step move of one dot, rescaled. The atom " +
+      "sets the direction; its coefficient sets the magnitude.";
+  } else {
+    sv = sketch2D(g, ch, color);
+    note = "The atom decoded by the inverse head (mean over 96 " +
+      "held-out states; arrow = final step). Scale bar: " + sv + " " + u(sv) + ".";
+  }
+  note += " Ray length in the cloud = the atom's share inside the " +
+    "three shown PCs.";
+  document.getElementById("cloud-card-note").textContent = note;
+  document.getElementById("cloud-card-barcap").style.display = "none";
+  document.getElementById("cloud-card-bars").innerHTML = "";
+}
+
+// drag-to-rotate for the Cube card's 3-D sketch
+const cardCanvas = document.getElementById("cloud-card-canvas");
+let card3 = null, cardDrag = null;
+cardCanvas.addEventListener("pointerdown", e => {
+  if (!card3) return;
+  cardDrag = [e.clientX, e.clientY];
+  cardCanvas.setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+cardCanvas.addEventListener("pointermove", e => {
+  if (!card3 || !cardDrag) return;
+  card3.A -= (e.clientX - cardDrag[0]) * 0.012;
+  card3.E = Math.min(1.45, Math.max(-1.45,
+    card3.E + (e.clientY - cardDrag[1]) * 0.012));
+  cardDrag = [e.clientX, e.clientY];
+  const g = ctx2d(cardCanvas, 164, 164);
+  g.clearRect(0, 0, 164, 164);
+  sketch3D(g, card3.ch, card3.color, card3.A, card3.E);
+});
+cardCanvas.addEventListener("pointerup", () => { cardDrag = null; });
+function select(k) {
+  selected = k; selectedAtom = -1;
+  atomOpacity();
+  document.getElementById("cloud-card-barcap").style.display = "";
+  card.style.display = "block";
+  const ch = data.actions[k];
+  const dims = ch[0].length;
+  document.getElementById("cloud-card-title").textContent = "action chunk " + k;
+  let sub = S + " executions highlighted · " + data.models[cur].label;
+  if (dims === 5) {
+    const yaw = ch.reduce((s, a) => s + a[3], 0);
+    const grip = ch.reduce((s, a) => s + a[4], 0);
+    if (Math.abs(yaw) > 0.5) sub += " · net yaw ψ " + yaw.toFixed(1);
+    if (Math.abs(grip) > 0.5) sub += " · net grip " + grip.toFixed(1);
+  }
+  document.getElementById("cloud-card-sub").textContent = sub;
+  const g = ctx2d(cardCanvas, 164, 164);
+  g.clearRect(0, 0, 164, 164);
+  const u = v => (v === 1
+    ? ENVS[curEnv].unit.replace("units", "unit") : ENVS[curEnv].unit);
+  card3 = null;
+  cardCanvas.style.cursor = "default";
+  let note, sv;
+  if (dims === 5) {
+    sv = sketch3D(g, ch, chunkColor[k]);
+    card3 = sv == null ? null
+      : { ch, color: chunkColor[k], A: DEF_A, E: DEF_E };
+    cardCanvas.style.cursor = card3 ? "grab" : "default";
+    note = sv == null
+      ? "This chunk commands no translation (rotation or gripper only), " +
+        "so the end effector stays in place."
+      : "The commanded 5-step chunk: end-effector xyz path (the " +
+        "stroke thickens with time; gray = its projection on the x-y " +
+        "plane; dotted = drop from the final point). Axis arms at the " +
+        "start = " + sv + " " + u(sv) + " each. Drag this small view " +
+        "to rotate it.";
+  } else if (dims === 4) {
+    sv = sketchDots(g, ch);
+    note = "The commanded single-step move: one dot is displaced " +
+      "(dashed circle = where it lands). Scale bar: " + sv + " " +
+      u(sv) + ".";
+  } else {
+    sv = sketch2D(g, ch, chunkColor[k]);
+    note = "The commanded chunk in action space (arrow = final step; " +
+      "thin axes cross at the start, y up). Scale bar: " + sv + " " +
+      u(sv) + ".";
+  }
+  document.getElementById("cloud-card-note").textContent = note;
+  const bars = document.getElementById("cloud-card-bars");
+  bars.innerHTML = "";
+  const mx = Math.max(
+    ...data.models.map(mo => (mo.sep ? mo.sep[k] : 0)), 1e-9);
+  data.models.forEach((mo, i) => {
+    if (!mo.sep) return;
+    const s = mo.sep[k];
+    const row = document.createElement("div");
+    row.className = "brow" + (i === cur ? " cur" : "");
+    const txt = (s >= 10 ? Math.round(s) : s.toFixed(1)) + "×";
+    row.innerHTML =
+      '<span class="lbl">' + mo.label.replace(/\s*\(.*/, "").replace("-style", "") + "</span>" +
+      '<div class="tr"><div class="fill" style="width:' +
+      (s / mx * 100).toFixed(0) + '%"></div></div><span>' + txt + "</span>";
+    bars.appendChild(row);
+  });
+  paint();
+}
+
+// a "nice" scale-bar length (1, 2 or 5 times a power of ten) <= target
+function nice(t) {
+  const k = Math.pow(10, Math.floor(Math.log10(t)));
+  for (const m of [5, 2, 1]) if (m * k <= t) return m * k;
+  return k;
+}
+
+// dark scale bar + value at the canvas' bottom-right corner
+function scaleBar(g, len, value) {
+  g.strokeStyle = "#3c3c40"; g.lineWidth = 1.5; g.lineCap = "butt";
+  g.beginPath(); g.moveTo(154 - len, 153); g.lineTo(154, 153); g.stroke();
+  g.fillStyle = "#75757b"; g.font = "9px Georgia"; g.textAlign = "center";
+  g.fillText(String(value), 154 - len / 2, 148);
+  g.textAlign = "left";
+}
+
+// cumulative 2-D path, scaled to fit, arrowhead on the final step
+function sketch2D(g, ch, color) {
+  const px = [[0, 0]];
+  for (const [x, y] of ch) px.push([px.at(-1)[0] + x, px.at(-1)[1] + y]);
+  const xs = px.map(p => p[0]), ys = px.map(p => p[1]);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const span = Math.max(Math.max(...xs) - Math.min(...xs),
+                        Math.max(...ys) - Math.min(...ys), 1e-6);
+  const sc = 118 / span;
+  const X = p => 82 + (p[0] - cx) * sc, Y = p => 82 - (p[1] - cy) * sc;
+  // thin axes through the start of the chunk (the action origin)
+  g.strokeStyle = "#ececec"; g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(6, Y(px[0])); g.lineTo(158, Y(px[0]));
+  g.moveTo(X(px[0]), 6); g.lineTo(X(px[0]), 158);
+  g.stroke();
+  g.fillStyle = "#b5b3ac"; g.font = "italic 9px Georgia";
+  g.fillText("x", 151, Y(px[0]) - 4);
+  g.fillText("y", X(px[0]) + 5, 13);
+  g.strokeStyle = "#" + color.getHexString();
+  g.lineWidth = 3; g.lineCap = "round";
+  g.beginPath(); g.moveTo(X(px[0]), Y(px[0]));
+  for (const p of px.slice(1)) g.lineTo(X(p), Y(p));
+  g.stroke();
+  g.fillStyle = "#16161a";
+  g.beginPath(); g.arc(X(px[0]), Y(px[0]), 3.4, 0, 7); g.fill();
+  const a = px.at(-2), b = px.at(-1);
+  const th = Math.atan2(Y(b) - Y(a), X(b) - X(a));
+  g.beginPath();
+  g.moveTo(X(b) + 9 * Math.cos(th), Y(b) + 9 * Math.sin(th));
+  g.lineTo(X(b) + 9 * Math.cos(th + 2.5), Y(b) + 9 * Math.sin(th + 2.5));
+  g.lineTo(X(b) + 9 * Math.cos(th - 2.5), Y(b) + 9 * Math.sin(th - 2.5));
+  g.closePath(); g.fill();
+  const v = nice(span * 0.35);
+  scaleBar(g, v * sc, v);
+  return v;
+}
+
+// the dot-world chunk: two dots in their dataset colors, an arrow on the
+// one the command displaces (image convention: +y is down, as in the frames)
+function sketchDots(g, ch, showBar = true) {
+  const a = ch[0], sc = 2.6;
+  const dots = [
+    { x: 60, y: 104, dx: a[0], dy: a[1], c: "#d43a3a" },
+    { x: 104, y: 60, dx: a[2], dy: a[3], c: "#2bb24c" },
+  ];
+  for (const d of dots) {
+    g.fillStyle = d.c;
+    g.beginPath(); g.arc(d.x, d.y, 7, 0, 7); g.fill();
+    if (Math.hypot(d.dx, d.dy) < 1e-6) continue;
+    const tx = d.x + d.dx * sc, ty = d.y + d.dy * sc;
+    g.strokeStyle = d.c; g.lineWidth = 2.5; g.lineCap = "round";
+    g.beginPath(); g.moveTo(d.x, d.y); g.lineTo(tx, ty); g.stroke();
+    g.setLineDash([3, 3]);
+    g.beginPath(); g.arc(tx, ty, 7, 0, 7); g.stroke();
+    g.setLineDash([]);
+    const th = Math.atan2(ty - d.y, tx - d.x);
+    g.beginPath();
+    g.moveTo(tx + 8 * Math.cos(th), ty + 8 * Math.sin(th));
+    g.lineTo(tx + 8 * Math.cos(th + 2.4), ty + 8 * Math.sin(th + 2.4));
+    g.lineTo(tx + 8 * Math.cos(th - 2.4), ty + 8 * Math.sin(th - 2.4));
+    g.closePath(); g.fill();
+  }
+  if (showBar) scaleBar(g, 10 * sc, 10);
+  return 10;
+}
+
+// cumulative xyz path in a rotatable oblique view (drag the small
+// canvas): stroke goes from thin to thick with time; gray = the path's
+// projection on the x-y plane (z = 0); dotted = drop from the final point
+// to that projection. The fit uses the 3-D bounding radius, so rotating
+// never rescales.
+const DEF_A = -58 * Math.PI / 180, DEF_E = 20 * Math.PI / 180;
+function sketch3D(g, ch, color, A = DEF_A, E = DEF_E) {
+  const p3 = [[0, 0, 0]];
+  for (const a of ch) {
+    const l = p3.at(-1);
+    p3.push([l[0] + a[0], l[1] + a[1], l[2] + a[2]]);
+  }
+  const spans = [0, 1, 2].map(d =>
+    Math.max(...p3.map(p => p[d])) - Math.min(...p3.map(p => p[d])));
+  if (Math.max(...spans) < 1e-3) {      // yaw/gripper-only chunk: no path
+    g.fillStyle = "#" + color.getHexString();
+    g.beginPath(); g.arc(82, 82, 5, 0, 7); g.fill();
+    return null;
+  }
+  const sh3 = p3.map(p => [p[0], p[1], 0]);       // x-y-plane projection
+  const all3 = p3.concat(sh3);
+  const c3 = [0, 1, 2].map(d =>
+    all3.reduce((s, p) => s + p[d], 0) / all3.length);
+  const R = Math.max(...all3.map(p =>
+    Math.hypot(p[0] - c3[0], p[1] - c3[1], p[2] - c3[2])), 1e-6);
+  const sc = 56 / R;
+  const proj = p => {
+    const u = -Math.sin(A) * p[0] + Math.cos(A) * p[1];
+    const w = Math.cos(A) * p[0] + Math.sin(A) * p[1];
+    return [u, p[2] * Math.cos(E) - w * Math.sin(E)];
+  };
+  const o2 = proj(c3);
+  const P = p => {
+    const q = proj(p);
+    return [82 + (q[0] - o2[0]) * sc, 82 - (q[1] - o2[1]) * sc];
+  };
+  const path = p3.map(P), shadow = sh3.map(P);
+  g.lineCap = "round";
+  g.strokeStyle = "#d9d9d9"; g.lineWidth = 1.2;
+  g.beginPath(); g.moveTo(...shadow[0]);
+  for (const q of shadow.slice(1)) g.lineTo(...q);
+  g.stroke();
+  g.setLineDash([2, 3]); g.lineWidth = 1;
+  g.beginPath(); g.moveTo(...path.at(-1)); g.lineTo(...shadow.at(-1));
+  g.stroke();
+  g.setLineDash([]);
+  const v = nice(2 * R * 0.55);
+  const [ox, oy] = path[0];
+  g.font = "italic 10.5px Georgia"; g.lineWidth = 1.2;
+  ["x", "y", "z"].forEach((nm, i) => {
+    const t = [0, 0, 0];
+    t[i] = v;
+    const [tx, ty] = P(t);
+    g.strokeStyle = "#c9c7c0";
+    g.beginPath(); g.moveTo(ox, oy); g.lineTo(tx, ty); g.stroke();
+    g.fillStyle = "#75757b";
+    g.fillText(nm, ox + (tx - ox) * 1.3 - 3, oy + (ty - oy) * 1.3 + 3);
+  });
+  g.strokeStyle = "#" + color.getHexString();
+  const SUB = 4, STEPS = path.length - 1;
+  for (let i = 0; i < STEPS; i++) {
+    for (let j = 0; j < SUB; j++) {
+      const t0 = j / SUB, t1 = (j + 1) / SUB;
+      const a = [path[i][0] + (path[i + 1][0] - path[i][0]) * t0,
+                 path[i][1] + (path[i + 1][1] - path[i][1]) * t0];
+      const b = [path[i][0] + (path[i + 1][0] - path[i][0]) * t1,
+                 path[i][1] + (path[i + 1][1] - path[i][1]) * t1];
+      g.lineWidth = 1.4 + 5.2 * ((i + t0) / STEPS);
+      g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]);
+      g.stroke();
+    }
+  }
+  return v;
+}
+
+function resize() {
+  const w = canvas.clientWidth || wrap.clientWidth, h = canvas.clientHeight || 540;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  kick();
+}
+
+// render only while the view is on screen and the tab is visible
+let visible = true, raf = 0;
+function frame() {
+  raf = 0;
+  if (!visible || document.hidden) return;
+  controls.update(); renderer.render(scene, camera);
+  raf = requestAnimationFrame(frame);
+}
+function kick() { if (!raf && visible && !document.hidden) raf = requestAnimationFrame(frame); }
+new IntersectionObserver(es => { visible = es[0].isIntersecting; kick(); })
+  .observe(wrap);
+document.addEventListener("visibilitychange", kick);
+
+window.addEventListener("resize", resize);
+resize();
+envTog.querySelector("button").classList.add("active");
+applyData();
+window.__cloud = { setEnv, setModel, select, deselect, selectAtom,
+  vocab: v => { vocabOn = v; updateAtoms(); } };  // console hooks
+window.__cloudReady = true;
+// slow network: if the fallback already replaced the view, remove it now
+const fb = document.getElementById("cloud-fallback");
+if (fb) fb.remove();
+kick();
+</script>
+
+<!-- ════════ STATE ════════ -->
+<section id="state">
+  <h2>State information is kept</h2>
+  <p>Concentrating latent transitions should not remove the state
+  information the world model needs. Linear and MLP probes on frozen
+  z<sub>t</sub>, evaluated on disjoint episodes, show every probe R&sup2;
+  of EquiJEPA within 0.04 of the matched base.</p>
+  <div class="tbl">
+  <table>
+    <caption>Held-out R&sup2; of probes on frozen z<sub>t</sub>. Position
+    rows average their coordinates. Push-T base and EquiJEPA use the
+    10-epoch protocol, LeWM-style its 3-epoch budget; DINO-WM-style is
+    frozen. Cube and Maze models use matched 3-epoch and 9-epoch budgets.
+    Cube block yaw is omitted because no representation decodes it (all
+    R&sup2; &le; 0).</caption>
+    <thead>
+      <tr><th></th><th class="l"></th><th colspan="4" style="text-align:center">linear probe</th><th colspan="4" style="text-align:center">MLP probe</th></tr>
+      <tr><th>environment</th><th class="l">quantity</th><th>LeWM</th><th>DINO</th><th>base</th><th>EquiJEPA</th><th>LeWM</th><th>DINO</th><th>base</th><th>EquiJEPA</th></tr>
+    </thead>
+    <tbody>
+      <tr class="grp"><td>Push-T</td><td class="l">agent position</td><td>0.940</td><td>0.961</td><td>0.992</td><td>0.989</td><td>0.964</td><td>0.945</td><td>0.966</td><td>0.977</td></tr>
+      <tr><td></td><td class="l">block position</td><td>0.933</td><td>0.962</td><td>0.939</td><td>0.925</td><td>0.939</td><td>0.926</td><td>0.950</td><td>0.945</td></tr>
+      <tr><td></td><td class="l">block orientation</td><td>0.591</td><td>0.758</td><td>0.508</td><td>0.468</td><td>0.754</td><td>0.481</td><td>0.665</td><td>0.637</td></tr>
+      <tr class="grp"><td>Cube</td><td class="l">block position</td><td>0.953</td><td>0.978</td><td>0.993</td><td>0.994</td><td>0.983</td><td>0.659</td><td>0.996</td><td>0.996</td></tr>
+      <tr><td></td><td class="l">gripper position</td><td>0.989</td><td>0.996</td><td>0.999</td><td>0.998</td><td>0.992</td><td>0.980</td><td>0.997</td><td>0.997</td></tr>
+      <tr><td></td><td class="l">gripper opening</td><td>0.872</td><td>0.850</td><td>0.962</td><td>0.960</td><td>0.939</td><td>0.789</td><td>0.983</td><td>0.985</td></tr>
+      <tr class="grp"><td>Maze</td><td class="l">agent position</td><td>&minus;0.41</td><td>0.994</td><td>0.892</td><td>0.882</td><td>0.282</td><td>0.981</td><td>0.960</td><td>0.954</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Action prototypes rendered in pixels</h3>
+  <p>A pixel decoder trained on each frozen representation (same
+  architecture, data, and optimization; both reach PSNR &asymp; 31 dB)
+  renders z<sub>t</sub>&nbsp;+&nbsp;&rho;(a<sub>t</sub>). The decoder is
+  used only for measurement. On contact-free transitions the rendered
+  agent moves to its position in o<sub>t+1</sub>. Under contact the agent
+  moves but the block does not: the block's state-dependent motion is in
+  the interaction residual. Over 1,024 held-out transitions, the rendered
+  agent lands a median 2.1 px from its position in o<sub>t+1</sub> with
+  EquiJEPA versus 9.5 px with the base on contact-free transitions, and
+  1.9 versus 6.5 px under contact; the base lands farther away in 96% of
+  transitions.</p>
+  <div class="grid2">
+    <figure>
+      <img src="assets/fig/decoder_diagram_equi_q75.png" loading="lazy"
+           width="1100" height="780" alt="Decoded prototypes, EquiJEPA">
+      <figcaption><b>EquiJEPA</b> with its state-blind action
+      prototype.</figcaption>
+    </figure>
+    <figure>
+      <img src="assets/fig/decoder_diagram_vanilla_q75.png" loading="lazy"
+           width="1100" height="780" alt="Decoded prototypes, base model">
+      <figcaption><b>Base</b> with a matched prototype fitted after
+      training.</figcaption>
+    </figure>
+  </div>
+  <p class="cloud-hint">The red ring marks the agent in o<sub>t+1</sub>.
+  Each row is the held-out transition, contact-free (top) or contact
+  (bottom), at the 75th percentile of the per-transition gap in rendered
+  agent error between the two models.</p>
+
+  <h3>Interaction residuals mark walls in a held-out maze</h3>
+  <figure>
+    <img src="assets/fig/maze_wallmap.png" loading="lazy"
+         width="1700" height="746" alt="Interaction residual per cell in a held-out maze">
+    <figcaption>Mean interaction-residual magnitude
+    &Vert;&Delta;z&nbsp;&minus;&nbsp;&rho;(a)&Vert; per cell of a
+    maze layout not seen in training; walls in cyan. Heads are fitted on
+    free-space transitions only. Left: base (labelled
+    &ldquo;vanilla&rdquo;). Right: EquiJEPA. The shown EquiJEPA checkpoint
+    localizes walls with AUC 0.948; over three seeds the AUC is 0.943 for
+    EquiJEPA and 0.664 for the base.</figcaption>
+  </figure>
+</section>
+
+<!-- ════════ COMPOSITION ════════ -->
+<section id="composition">
+  <h2>Composing and executing action prototypes</h2>
+  <p>All evaluations freeze the pretrained encoder. In the two-dot world
+  every training transition moves one dot along one signed axis. We add
+  prototypes in latent space, decode sums with the inverse head, and, on
+  Push-T, add a prototype at a new starting state, decode the pair
+  (z,&nbsp;z&nbsp;+&nbsp;&rho;(a)) with the inverse head, and execute the
+  chunk in the simulator (361 pairs, 214 with contact at the new state).
+  For the base, the prototype is fitted after training (a ridge fit on
+  Push-T).</p>
+  <div class="tbl">
+  <table>
+    <caption>Two-dot results over three model seeds. t: paired
+    t-statistic. Push-T errors are
+    distances from where the original action moves the agent (or
+    block).</caption>
+    <thead><tr><th>test</th><th>base</th><th>EquiJEPA</th></tr></thead>
+    <tbody>
+      <tr class="grp"><td>Two-dot, 8 steps with both dots moving: sum of single-dot prototypes, relative error &darr;</td><td>0.551</td><td><b>0.097</b></td></tr>
+      <tr><td>Two-dot, 8 steps: prototype of each joint action, relative error &darr;</td><td>0.709</td><td><b>0.190</b></td></tr>
+      <tr><td>Two-dot, decoded sum &rho;(a<sub>1</sub>)+&rho;(a<sub>2</sub>): both dots within 2 px &uarr; (t = 4.94)</td><td>11.5%</td><td><b>40.1%</b></td></tr>
+      <tr class="grp"><td>Push-T, prototype at a new state: agent error, all pairs &darr; (t = 10.0)</td><td>4.02 px</td><td><b>2.67 px</b></td></tr>
+      <tr><td>&emsp;contact-free pairs</td><td>4.33 px</td><td><b>2.93 px</b></td></tr>
+      <tr><td>&emsp;contact pairs</td><td>3.80 px</td><td><b>2.49 px</b></td></tr>
+      <tr><td>&emsp;contact pairs, block pose error &darr;</td><td>3.02 px</td><td><b>2.25 px</b></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p><em>Linear maps of the base latents.</em> An invertible linear map
+  of the frozen base latents cannot change the execution results: the
+  least-squares prototype of the mapped latents is the mapped prototype,
+  and the inverse head composed with the inverse map decodes the same
+  action. We also fitted two maps on frozen base latents: one trained
+  with &Lscr;<sub>equiv</sub> under unit determinant and condition number
+  at most 30, and one that shrinks directions outside the
+  controlled-state subspace. Neither reproduces composition in the
+  two-dot world (8-step dictionary error 0.226 and 0.182, against 0.523
+  for the base and 0.022 for EquiJEPA). In Cube planning at a budget of
+  K&nbsp;=&nbsp;8 samples, EquiJEPA raises success from 35.3% to 46.7%, and the two maps
+  reach 30.0% and 36.4%.</p>
+</section>
+
+<!-- ════════ DICTIONARY ════════ -->
+<section id="dictionary">
+  <h2>A sparse dictionary of latent transitions</h2>
+  <p>A top-k sparse autoencoder fitted to the latent transitions of each
+  frozen encoder gives each &Delta;z nonnegative coefficients c on at most
+  k of K unit-norm atoms and reconstructs &Delta;z as
+  c<sup>&#8868;</sup>V&nbsp;+&nbsp;b, with b the
+  mean latent transition. Several atoms can be active at once, so a
+  diagonal move is the sum of a horizontal and a vertical atom; a
+  single-code VQ codebook needs a separate codeword for each such
+  combination. K&nbsp;=&nbsp;8 in the two-dot world and
+  K&nbsp;=&nbsp;16 on Push-T and Cube.</p>
+  <div class="tbl">
+  <table>
+    <caption>Two-dot world, three model seeds. FVU: fraction of
+    latent-transition variance not reconstructed. Held-out error:
+    reconstruction of unseen within-step combinations. h&nbsp;=&nbsp;8:
+    relative error of summed reconstructions over eight steps. Physical
+    px: error after decoding a composed goal into simulator pixels. Atom
+    ID: top-1 primitive identification up to a permutation of atom
+    labels.</caption>
+    <thead><tr><th>representation</th><th>FVU &darr;</th><th>held-out err. &darr;</th><th>h = 8 err. &darr;</th><th>physical px &darr;</th><th>atom ID &uarr;</th></tr></thead>
+    <tbody>
+      <tr class="grp"><td>base</td><td>.0836</td><td>.2239</td><td>.5225</td><td>.4737</td><td>.949</td></tr>
+      <tr><td>EquiJEPA</td><td><b>.0007</b></td><td><b>.0273</b></td><td><b>.0217</b></td><td><b>.1112</b></td><td><b>1.000</b></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>For EquiJEPA the eight two-dot atoms match the eight signed
+  primitives one-to-one, and when both dots move in a held-out transition
+  the code activates both corresponding atoms in all 10,000 cases. On
+  Push-T, decoding a fixed atom through the inverse head at 96 held-out
+  states gives consistent action directions (median cosine 0.89 to the
+  atom's mean readout); with K&nbsp;=&nbsp;32 and top-4 codes the FVU is
+  0.091 on EquiJEPA's latent transitions and 0.174 on the base's. On Cube
+  the dictionary reaches FVU 0.047, and a same-size VQ codebook has 4.3&times;
+  larger error. Decoded Cube atoms raise or lower the end effector, open
+  or close the gripper, or move the end effector while rotating the
+  wrist.</p>
+  <figure>
+    <img src="assets/fig/atom_trajectories.png" loading="lazy"
+         width="1700" height="465" alt="The 16 Push-T atoms decoded into action chunks">
+    <figcaption><b>The 16 Push-T atoms</b>, each decoded by the trained
+    inverse head applied to one unit of the atom,
+    &acirc;&nbsp;=&nbsp;g(z,&nbsp;z&nbsp;+&nbsp;v<sub>k</sub>), averaged over
+    96 held-out states (arrowhead = final step; standardized action
+    units).</figcaption>
+  </figure>
+  <details>
+    <summary>Cube atoms</summary>
+    <figure class="narrow">
+      <img src="assets/fig/cube_atoms.png" loading="lazy"
+           width="1400" height="1311" alt="Cube atoms decoded into end-effector paths">
+      <figcaption>Each Cube atom decoded by the inverse head at its median
+      active coefficient, averaged over 96 held-out states, drawn as its
+      xyz path (gray: floor projection). The stroke goes from thin to thick
+      with time; segment color is the per-step gripper command.</figcaption>
+    </figure>
+  </details>
+
+  <h3>The dictionary on real transitions</h3>
+  <p>The Push-T dictionary (K&nbsp;=&nbsp;16, top-4 codes) applied to 48
+  held-out expert transitions. The coefficients come from the trained
+  encoder and sparse autoencoder.</p>
+  <div class="sae-wrap">
+    <div class="sae-panel">
+      <h4>1 · a held-out transition</h4>
+      <canvas id="sae-in" width="220" height="220"></canvas>
+      <div class="sae-nav">
+        <button id="sae-prev" aria-label="previous transition">&larr;</button>
+        <span id="sae-idx"></span>
+        <button id="sae-next" aria-label="next transition">&rarr;</button>
+        <button id="sae-rand">random</button>
+      </div>
+      <p>The logged 5-step action chunk. The sparse autoencoder sees its
+      latent transition &Delta;z.</p>
+    </div>
+    <div class="sae-panel">
+      <h4>2 · encode, keep the top 4</h4>
+      <canvas id="sae-bars" width="220" height="220"></canvas>
+      <div id="sae-atoms"></div>
+      <p id="sae-coef"></p>
+    </div>
+    <div class="sae-panel">
+      <h4>3 · decode = sum of atoms</h4>
+      <div class="sae-nav" style="margin:0 0 8px">
+        <button id="sae-mode-pc" class="on">latent PCs</button>
+        <button id="sae-mode-act">action readout</button>
+      </div>
+      <canvas id="sae-pc" width="220" height="220"></canvas>
+      <p id="sae-err"></p>
+    </div>
+  </div>
+  <p class="cloud-hint" id="sae-hint"></p>
+  <details>
+    <summary>Why the latent view shows straight segments</summary>
+    <p>In latent space an atom is one vector, so each term
+    c&thinsp;&middot;&thinsp;v is one straight segment; the curved 5-step
+    strokes are the same atoms read out into action space. The sum starts
+    at the autoencoder bias b, which is close to the mean &Delta;z (the
+    plot's origin). The faint lines at the start are all 16 atom
+    directions. The action-readout view inverts the linear action map only
+    along its two directions with &sigma;&nbsp;&ge;&nbsp;0.3&thinsp;&sigma;<sub>max</sub>;
+    inverting the weaker directions would amplify them up to 200&times;.
+    The atom thumbnails are decoded by the trained inverse head, as in the
+    atom figure above.</p>
+  </details>
+</section>
+
+<script type="module">
+const D = await (await fetch("assets/sae_demo.json")).json();
+const EX = D.examples;
+let cur = 0;
+
+// atom color = hue of its decoded net direction
+const atomColor = D.chunks.map(ch => {
+  let x = 0, y = 0;
+  for (const [dx, dy] of ch) { x += dx; y += dy; }
+  const h = (Math.atan2(y, x) / (2 * Math.PI) + 1) % 1;
+  return `hsl(${(h * 360).toFixed(0)} 62% 45%)`;
+});
+const hueOf = a => {
+  let x = 0, y = 0;
+  for (const [dx, dy] of a) { x += dx; y += dy; }
+  return `hsl(${((Math.atan2(y, x) / (2 * Math.PI) + 1) % 1 * 360).toFixed(0)} 62% 48%)`;
+};
+const G = id => ctx2d(document.getElementById(id), 220, 220);
+
+// panel 1: the input action chunk (cumulative path, arrow at the end)
+function drawInput(ex) {
+  const g = G("sae-in");
+  g.clearRect(0, 0, 220, 220);
+  const px = [[0, 0]];
+  for (const [x, y] of ex.a) px.push([px.at(-1)[0] + x, px.at(-1)[1] + y]);
+  const xs = px.map(p => p[0]), ys = px.map(p => p[1]);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const span = Math.max(Math.max(...xs) - Math.min(...xs),
+                        Math.max(...ys) - Math.min(...ys), 1e-6);
+  const sc = 150 / span;
+  const X = p => 110 + (p[0] - cx) * sc, Y = p => 110 - (p[1] - cy) * sc;
+  g.strokeStyle = "#ececec"; g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(8, Y(px[0])); g.lineTo(212, Y(px[0]));
+  g.moveTo(X(px[0]), 8); g.lineTo(X(px[0]), 212);
+  g.stroke();
+  g.strokeStyle = hueOf(ex.a); g.lineWidth = 3.5; g.lineCap = "round";
+  g.beginPath(); g.moveTo(X(px[0]), Y(px[0]));
+  for (const p of px.slice(1)) g.lineTo(X(p), Y(p));
+  g.stroke();
+  g.fillStyle = "#16161a";
+  g.beginPath(); g.arc(X(px[0]), Y(px[0]), 4, 0, 7); g.fill();
+  const a = px.at(-2), b = px.at(-1);
+  const th = Math.atan2(Y(b) - Y(a), X(b) - X(a));
+  g.fillStyle = hueOf(ex.a);
+  g.beginPath();
+  g.moveTo(X(b) + 10 * Math.cos(th), Y(b) + 10 * Math.sin(th));
+  g.lineTo(X(b) + 10 * Math.cos(th + 2.5), Y(b) + 10 * Math.sin(th + 2.5));
+  g.lineTo(X(b) + 10 * Math.cos(th - 2.5), Y(b) + 10 * Math.sin(th - 2.5));
+  g.closePath(); g.fill();
+}
+
+// panel 2: all K activations; the gate keeps the top-k
+function drawBars(ex) {
+  const g = G("sae-bars");
+  g.clearRect(0, 0, 220, 220);
+  const hmax = Math.max(...ex.h, 1e-9);
+  const w = 220 / D.K;
+  const kept = new Set(ex.ids);
+  ex.h.forEach((h, k) => {
+    const bh = 168 * h / hmax;
+    g.fillStyle = kept.has(k) ? atomColor[k] : "#e4e2dc";
+    g.fillRect(k * w + 2, 190 - bh, w - 4, bh);
+    if (kept.has(k)) {
+      g.fillStyle = "#16161a"; g.font = "9px Georgia";
+      g.textAlign = "center";
+      g.fillText(String(k), k * w + w / 2, 202);
+    }
+  });
+  g.textAlign = "left";
+  g.fillStyle = "#75757b"; g.font = "italic 11px Georgia";
+  g.fillText("ReLU activations; gray = set to zero", 8, 14);
+  const th4 = Math.min(...ex.cs) / hmax * 168;
+  g.strokeStyle = "#b2352b"; g.setLineDash([3, 3]); g.lineWidth = 1;
+  g.beginPath(); g.moveTo(0, 190 - th4); g.lineTo(220, 190 - th4);
+  g.stroke(); g.setLineDash([]);
+}
+
+// panel 3: head-to-tail sum in the PC plane (linear, hence exact);
+// scaled per example so short sums stay readable
+function drawPC(ex) {
+  const g = G("sae-pc");
+  g.clearRect(0, 0, 220, 220);
+  const keyPts = [D.start_pc, ex.dz];
+  let pp = [...D.start_pc];
+  ex.ids.forEach((id, j) => {
+    pp = [pp[0] + ex.cs[j] * D.atoms_pc[id][0],
+          pp[1] + ex.cs[j] * D.atoms_pc[id][1]];
+    keyPts.push([...pp]);
+  });
+  const m = Math.max(...keyPts.map(p => Math.hypot(...p)), 1e-9);
+  const PCSCALE = 90 / m;
+  const X = p => 110 + p[0] * PCSCALE, Y = p => 110 - p[1] * PCSCALE;
+  g.strokeStyle = "#f0efec"; g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(8, 110); g.lineTo(212, 110);
+  g.moveTo(110, 8); g.lineTo(110, 212);
+  g.stroke();
+  g.fillStyle = "#b5b3ac"; g.font = "italic 9px Georgia";
+  g.fillText("PC1", 196, 106); g.fillText("PC2", 114, 16);
+  // faint lines: all K atom directions at the start of the sum
+  const s0 = D.start_pc;
+  D.atoms_pc.forEach((d, k) => {
+    g.strokeStyle = "#eceae4";
+    g.beginPath(); g.moveTo(X(s0), Y(s0));
+    g.lineTo(X(s0) + d[0] * PCSCALE * 0.5, Y(s0) - d[1] * PCSCALE * 0.5);
+    g.stroke();
+  });
+  // the sum: c_k * atom_k, largest first
+  let p = [...s0];
+  const order = ex.ids.map((id, j) => [id, ex.cs[j]])
+                      .sort((u, v) => v[1] - u[1]);
+  g.lineCap = "round";
+  for (const [id, c] of order) {
+    const q = [p[0] + c * D.atoms_pc[id][0], p[1] + c * D.atoms_pc[id][1]];
+    g.strokeStyle = atomColor[id]; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(X(p), Y(p)); g.lineTo(X(q), Y(q)); g.stroke();
+    p = q;
+  }
+  // residual to the true displacement
+  g.strokeStyle = "#8a8a90"; g.setLineDash([3, 3]); g.lineWidth = 1.2;
+  g.beginPath(); g.moveTo(X(p), Y(p)); g.lineTo(X(ex.dz), Y(ex.dz));
+  g.stroke(); g.setLineDash([]);
+  g.fillStyle = "#fff"; g.strokeStyle = "#16161a"; g.lineWidth = 1.6;
+  g.beginPath(); g.arc(X(p), Y(p), 4, 0, 7); g.fill(); g.stroke();
+  g.fillStyle = "#16161a";
+  g.beginPath(); g.arc(X(ex.dz), Y(ex.dz), 3.2, 0, 7); g.fill();
+}
+
+// action-readout view: only the two well-conditioned directions of the
+// linear action map are inverted (sigma >= 0.3 sigma_max); the full
+// pseudo-inverse would amplify the weak directions up to 200x
+function drawAct(ex) {
+  const g = G("sae-pc");
+  g.clearRect(0, 0, 220, 220);
+  const cum = a => {
+    const p = [[0, 0]];
+    for (const [x, y] of a) p.push([p.at(-1)[0] + x, p.at(-1)[1] + y]);
+    return p;
+  };
+  const ghost = cum(ex.a), target = cum(ex.ap);
+  const order = ex.ids.map((id, j) => [id, ex.cs[j]])
+                      .sort((u, v) => v[1] - u[1]);
+  const walk = [{ path: cum(D.a0_t), color: "#c9c7c0", w: 1.5 }];
+  let off = walk[0].path.at(-1);
+  for (const [id, c] of order) {
+    const p = cum(D.chunks_t[id].map(s => [s[0] * c, s[1] * c]))
+      .map(q => [q[0] + off[0], q[1] + off[1]]);
+    walk.push({ path: p, color: atomColor[id], w: 3 });
+    off = p.at(-1);
+  }
+  const all = [...ghost, ...target, ...walk.flatMap(s => s.path)];
+  const xs = all.map(p => p[0]), ys = all.map(p => p[1]);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const span = Math.max(Math.max(...xs) - Math.min(...xs),
+                        Math.max(...ys) - Math.min(...ys), 1e-6);
+  const sc = 176 / span;
+  const X = p => 110 + (p[0] - cx) * sc, Y = p => 110 - (p[1] - cy) * sc;
+  const line = (pts, color, w, dash) => {
+    g.strokeStyle = color; g.lineWidth = w; g.lineCap = "round";
+    g.setLineDash(dash || []);
+    g.beginPath(); g.moveTo(X(pts[0]), Y(pts[0]));
+    for (const p of pts.slice(1)) g.lineTo(X(p), Y(p));
+    g.stroke(); g.setLineDash([]);
+  };
+  g.strokeStyle = "#f0efec"; g.lineWidth = 1;
+  g.beginPath();
+  g.moveTo(8, Y([0, 0])); g.lineTo(212, Y([0, 0]));
+  g.moveTo(X([0, 0]), 8); g.lineTo(X([0, 0]), 212);
+  g.stroke();
+  line(ghost, "#d9d9d9", 1.5, [4, 3]);
+  line(target, "#16161a", 2);
+  for (const s of walk) line(s.path, s.color, s.w);
+  g.setLineDash([3, 3]); g.strokeStyle = "#8a8a90"; g.lineWidth = 1.2;
+  g.beginPath();
+  g.moveTo(X(off), Y(off));
+  g.lineTo(X(target.at(-1)), Y(target.at(-1)));
+  g.stroke(); g.setLineDash([]);
+  g.fillStyle = "#fff"; g.strokeStyle = "#16161a"; g.lineWidth = 1.6;
+  g.beginPath(); g.arc(X(off), Y(off), 4, 0, 7); g.fill(); g.stroke();
+  g.fillStyle = "#16161a";
+  g.beginPath();
+  g.arc(X(target.at(-1)), Y(target.at(-1)), 3.2, 0, 7); g.fill();
+}
+
+// thumbnail: one kept atom's decoded action chunk (canvas is 2x its CSS size)
+function drawAtomThumb(cv, chunk, color) {
+  const g = cv.getContext("2d");
+  g.clearRect(0, 0, 104, 104);
+  const px = [[0, 0]];
+  for (const [x, y] of chunk) px.push([px.at(-1)[0] + x, px.at(-1)[1] + y]);
+  const xs = px.map(p => p[0]), ys = px.map(p => p[1]);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const span = Math.max(Math.max(...xs) - Math.min(...xs),
+                        Math.max(...ys) - Math.min(...ys), 1e-6);
+  const sc = 74 / span;
+  const X = p => 52 + (p[0] - cx) * sc, Y = p => 52 - (p[1] - cy) * sc;
+  g.strokeStyle = color; g.lineWidth = 4.5; g.lineCap = "round";
+  g.beginPath(); g.moveTo(X(px[0]), Y(px[0]));
+  for (const p of px.slice(1)) g.lineTo(X(p), Y(p));
+  g.stroke();
+  g.fillStyle = "#16161a";
+  g.beginPath(); g.arc(X(px[0]), Y(px[0]), 4.5, 0, 7); g.fill();
+}
+
+let mode = "pc";
+function show(i) {
+  cur = (i + EX.length) % EX.length;
+  const ex = EX[cur];
+  drawInput(ex); drawBars(ex);
+  if (mode === "pc") drawPC(ex); else drawAct(ex);
+  document.getElementById("sae-idx").textContent =
+    `transition ${cur + 1} / ${EX.length}`;
+  const order = ex.ids.map((id, j) => [id, ex.cs[j]])
+                      .sort((u, v) => v[1] - u[1]);
+  const box = document.getElementById("sae-atoms");
+  box.innerHTML = "";
+  for (const [id, c] of order) {
+    const div = document.createElement("div");
+    div.className = "at";
+    const cv = document.createElement("canvas");
+    cv.width = cv.height = 104;
+    div.appendChild(cv);
+    const cap = document.createElement("div");
+    cap.className = "cap";
+    cap.innerHTML =
+      `<b style="color:${atomColor[id]}">atom ${id}</b><br>× ${c.toFixed(2)}`;
+    div.appendChild(cap);
+    box.appendChild(div);
+    drawAtomThumb(cv, D.chunks[id], atomColor[id]);
+  }
+  document.getElementById("sae-coef").innerHTML =
+    "Bars: ReLU activations of all " + D.K + " atoms. The dashed red " +
+    "line is the top-" + D.topk + " threshold; the " + (D.K - D.topk) +
+    " gray bars are set to zero. Below: the " + D.topk + " kept atoms " +
+    "decoded by the inverse head, with their coefficients.";
+  document.getElementById("sae-err").textContent = mode === "pc"
+    ? `Colored segments: each kept atom times its coefficient, placed ` +
+      `tip to tail; their sum is the reconstruction (open circle). ` +
+      `Black dot: the true Δz. Dashed line: the residual, here ` +
+      `${Math.round(ex.err * 100)}% of the length of Δz.`
+    : `Colored path: each kept atom's action readout, tip to tail ` +
+      `(open circle = the sum). Short gray start: the autoencoder bias ` +
+      `read out into action space, the same for every transition. ` +
+      `Black path: the part of the logged chunk along the two ` +
+      `well-conditioned directions of the linear action map; dashed ` +
+      `gray: the full logged chunk. The sum misses the end of the ` +
+      `black path by ${Math.round(ex.erra * 100)}%.`;
+}
+document.getElementById("sae-mode-pc").onclick = () => {
+  mode = "pc";
+  document.getElementById("sae-mode-pc").classList.add("on");
+  document.getElementById("sae-mode-act").classList.remove("on");
+  show(cur);
+};
+document.getElementById("sae-mode-act").onclick = () => {
+  mode = "act";
+  document.getElementById("sae-mode-act").classList.add("on");
+  document.getElementById("sae-mode-pc").classList.remove("on");
+  show(cur);
+};
+document.getElementById("sae-prev").onclick = () => show(cur - 1);
+document.getElementById("sae-next").onclick = () => show(cur + 1);
+document.getElementById("sae-rand").onclick = () =>
+  show(Math.floor(Math.random() * EX.length));
+document.getElementById("sae-hint").textContent =
+  `The plane is the top two principal components of held-out Δz ` +
+  `(${Math.round(D.var2 * 100)}% of its variance). A linear projection ` +
+  `preserves sums, so the drawn sum is exact. The residual comes from ` +
+  `keeping ${D.topk} of ${D.K} atoms (overall FVU ${D.fvu}).`;
+show(0);
+</script>
+
+<!-- ════════ INTERFACE ════════ -->
+<section id="interface">
+  <h2>Reusing the dictionary with a new command interface</h2>
+  <p>On the same recorded Push-T transitions, interface A writes each
+  action chunk as five 2-D commands (10 values). Interface B halves the
+  command scale, rotates the axes by 45&deg;, and uses three 2-D commands
+  per chunk (6 values). We freeze the encoder and the dictionary V learned
+  with interface A and train only an interface-B effect head
+  &rho;<sub>B</sub>(a<sub>B</sub>) &asymp; z<sub>t+1</sub>&nbsp;&minus;&nbsp;z<sub>t</sub>
+  and inverse head g<sub>B</sub>(z<sub>t</sub>,&nbsp;z<sub>t+1</sub>)
+  &asymp; a<sub>B</sub>. For paired commands that describe the same
+  transition, &rho;<sub>A</sub> and &rho;<sub>B</sub> give prototypes with
+  cosine similarity 0.974. Decoding a frozen atom v<sub>k</sub> through
+  either interface gives nearly the same physical direction in world
+  coordinates (cosine 0.995), and a greedy controller that follows the
+  dictionary decomposition succeeds on 58.7% of tasks with B and 58.0%
+  with A.</p>
+  <figure class="narrow">
+    <img src="assets/fig/cross_success.png" loading="lazy"
+         width="1000" height="634" alt="Closed-loop success with interfaces A and B">
+    <figcaption>Success of the greedy controller on 150 Push-T tasks;
+    light bars: the 77 tasks where random commands fail. &ldquo;full&rdquo;:
+    dictionary and heads fitted on all transitions. &ldquo;axis&rdquo;:
+    the dictionary and the interface-B heads were fitted without
+    world-diagonal motions, and interface B still reaches 59.3%.
+    &ldquo;B random&rdquo;: random interface-B commands.</figcaption>
+  </figure>
+</section>
+
+<!-- ════════ PLANNING ════════ -->
+<section id="planning">
+  <h2>Planning</h2>
+  <p>We decompose the goal's latent displacement over the dictionary,
+  read the resulting latent waypoints out with the inverse head, and use
+  the action sequence to initialize MPPI. This initialization helps
+  low-budget planning for both EquiJEPA and the base on Push-T and Cube,
+  and hurts it in Maze, where straight latent paths to the goal cross
+  walls. With the same initialization, EquiJEPA is ahead of the base on
+  Cube and Maze and behind it on Push-T. The paper's appendix gives the
+  success rates per sample budget.</p>
+</section>
+
+<!-- ════════ ABLATIONS ════════ -->
+<section id="ablations">
+  <h2>Ablations</h2>
+  <p>Single Push-T runs.</p>
+  <ul class="plain">
+    <li><em>The effect head must stay state-blind.</em> Giving it the
+    state raises its own fit from 0.878 to 0.916, but the encoder's action
+    fit returns to the base value.</li>
+    <li><em>The inverse loss prevents collapse.</em> Without it, the latent
+    variance reaches exactly zero within one epoch. Replacing it with the
+    LeWM isotropy guard avoids collapse but lowers action fit from 0.87 to
+    0.57.</li>
+    <li><em>The inverse head should see both latents.</em> Decoding the
+    action from &Delta;z alone leaves the head fit about the same (0.809
+    &rarr; 0.837) but lowers the linear block-angle probe from 0.468 to
+    0.153.</li>
+  </ul>
+</section>
+
+<!-- ════════ LIMITATIONS ════════ -->
+<section id="limitations">
+  <h2>Limitations</h2>
+  <ul class="plain">
+    <li>The action prototype is state-blind by design, so under contact it
+    describes the hand and leaves the object's response to the interaction
+    residual. A state-conditioned model of the residual, added on top of
+    the prototype, could make contact outcomes predictable as well.</li>
+    <li>Decoded initialization assumes a straight latent path to the goal,
+    which walls in Maze violate. Composing prototypes along waypoints could
+    remove this assumption.</li>
+    <li>The interface experiment changes the command mapping of one agent.
+    Extending it across embodiments requires aligning their latent
+    spaces.</li>
+    <li>We have not tested latent actions inferred from unlabeled video or
+    larger real-robot models.</li>
+  </ul>
+</section>
+
+<!-- ════════ BIBTEX ════════ -->
+<section id="bibtex">
+  <h2>BibTeX</h2>
+  <pre class="bibtex">@misc{wang2026equijepa,
+  title   = {{EquiJEPA}: Learning Action-Centered Latent Transition Geometry},
+  author  = {Wang, Yuhai and Zhang, Haichao and Yin, Qi and Zhou, Rongxuan
+             and Hu, Xiao and Shi, Yangming and Ye, Yang},
+  url     = {https://equijepa.github.io},
+  year    = {2026}
+}</pre>
+</section>
+
+<!-- ════════ AUTHORS ════════ -->
+<section id="authors">
+  <h2>Authors</h2>
+  <p class="authors">Yuhai Wang<sup>1</sup>, Haichao Zhang<sup>1</sup>,
+  Qi Yin<sup>2</sup>, Rongxuan Zhou<sup>1</sup>, Xiao Hu<sup>1</sup>,
+  Yangming Shi<sup>2</sup>, Yang Ye<sup>1</sup></p>
+  <p class="affil"><sup>1</sup>Northeastern University &nbsp;&nbsp;
+  <sup>2</sup>Colorado School of Mines</p>
+</section>
+
+</main>
+
+<footer>
+  EquiJEPA &nbsp;·&nbsp; The background animation is recorded from
+  training in the two-dot world (<a href="#animation">details</a>).
+</footer>
+
+<script>
+// the close-up video plays only while on screen; reduced motion: controls only
+(function () {
+  var v = document.querySelector("#animation video");
+  if (!v) return;
+  if (window.reduceMotion) { v.controls = true; v.preload = "metadata"; return; }
+  new IntersectionObserver(function (es) {
+    if (es[0].isIntersecting) { var p = v.play(); if (p && p.catch) p.catch(function () {}); }
+    else v.pause();
+  }, { threshold: 0.25 }).observe(v);
+})();
+</script>
+
+</body>
+</html>
